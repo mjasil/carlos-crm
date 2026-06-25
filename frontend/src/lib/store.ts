@@ -1,3 +1,4 @@
+'use client'
 import { create } from 'zustand'
 
 interface Store {
@@ -10,18 +11,18 @@ interface Store {
   logout: () => void
 }
 
-export const useStore = create<Store>((set) => ({
+export const useStore = create<Store>()((set) => ({
   user: null,
   token: null,
   selectedAccount: 1,
-  setUser: (user) => set({ user }),
-  setToken: (token) => {
+  setUser: (user: any) => set({ user }),
+  setToken: (token: string) => {
     if (typeof window !== 'undefined') {
       localStorage.setItem('carlos_token', token)
     }
     set({ token })
   },
-  setSelectedAccount: (n) => set({ selectedAccount: n }),
+  setSelectedAccount: (n: number) => set({ selectedAccount: n }),
   logout: () => {
     if (typeof window !== 'undefined') {
       localStorage.removeItem('carlos_token')
