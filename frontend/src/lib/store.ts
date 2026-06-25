@@ -16,12 +16,16 @@ export const useStore = create<Store>((set) => ({
   selectedAccount: 1,
   setUser: (user) => set({ user }),
   setToken: (token) => {
-    localStorage.setItem('carlos_token', token)
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('carlos_token', token)
+    }
     set({ token })
   },
   setSelectedAccount: (n) => set({ selectedAccount: n }),
   logout: () => {
-    localStorage.removeItem('carlos_token')
+    if (typeof window !== 'undefined') {
+      localStorage.removeItem('carlos_token')
+    }
     set({ user: null, token: null })
   }
 }))
