@@ -7,14 +7,20 @@ router = APIRouter()
 async def get_folders(account_number: int):
     try:
         client = await get_client(account_number)
-        folders = await client.get_dialogs_filters()
-        result = []
-        for folder in folders:
-            result.append({
-                "id": folder.id,
-                "title": folder.title,
-            })
-        return result
+        
+        # Get all folder filters using raw Telegram API
+        result = await client.invoke(
+            __import__('pyrogram.raw.functions.messages', fromlist=['GetDialogFilters']).GetDialogFilters()
+        )
+        
+        folders = []
+        for f in result.filters:
+            if hasattr(f, 'title'):
+                folders.append({
+                    "id": f.id,
+                    "title": f.title,
+                })
+        return folders
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
 
@@ -22,11 +28,13 @@ async def get_folders(account_number: int):
 async def get_folder_chats(account_number: int, folder_id: int):
     try:
         client = await get_client(account_number)
-        folders = await client.get_dialogs_filters()
+        
+        from pyrogram.raw.functions.messages import GetDialogFilters
+        result = await client.invoke(GetDialogFilters())
         
         target = None
-        for f in folders:
-            if f.id == folder_id:
+        for f in result.filters:
+            if hasattr(f, 'id') and f.id == folder_id:
                 target = f
                 break
         
@@ -34,9 +42,11 @@ async def get_folder_chats(account_number: int, folder_id: int):
             raise HTTPException(status_code=404, detail="Folder not found")
         
         chats = []
-        for peer in target.included_peers:
+        peers = getattr(target, 'include_peers', []) or getattr(target, 'included_peers', [])
+        
+        for peer in peers:
             try:
-                chat = await client.get_chat(peer)
+                chat = await client.get_chat(await client.resolve_peer(peer))
                 chat_type = "personal"
                 t = str(chat.type)
                 if "GROUP" in t or "SUPERGROUP" in t:
