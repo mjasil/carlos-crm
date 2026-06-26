@@ -501,7 +501,7 @@ async function sendMessage() {
     formData.append('chat_ids', selectedIds.join(','))
     formData.append('delay_seconds', delay)
     formData.append('sent_by', user.name || 'admin')
-    formData.append('parse_mode', 'markdown')
+    formData.append('parse_mode', 'md')
     
     const fileInput = document.getElementById('fileInput')
     if (fileInput.files[0]) {
