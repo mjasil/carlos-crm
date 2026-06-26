@@ -187,12 +187,16 @@
           <div class="card mb-4" id="progressCard" style="display:none">
             <h2 class="font-semibold text-white mb-3">Sending Progress</h2>
             <div class="progress-bar mb-2"><div class="progress-fill" id="progressFill" style="width:0%"></div></div>
-            <div style="display:flex;justify-content:space-between;font-size:13px">
+            <div style="display:flex;justify-content:space-between;font-size:13px;margin-bottom:12px">
               <span style="color:#4ade80">✅ <span id="progressSent">0</span> sent</span>
               <span style="color:#94a3b8"><span id="progressPct">0</span>%</span>
               <span style="color:#f87171">❌ <span id="progressFailed">0</span> failed</span>
             </div>
-            <p style="text-align:center;color:#94a3b8;font-size:12px;margin-top:8px" id="progressStatus"></p>
+            <p style="text-align:center;color:#94a3b8;font-size:12px;margin-bottom:12px" id="progressStatus"></p>
+            <div style="display:flex;gap:8px">
+              <button id="pauseBtn" onclick="togglePause()" style="flex:1;background:#f59e0b;color:white;border:none;padding:8px;border-radius:8px;cursor:pointer;font-weight:600;font-size:13px">⏸ Pause</button>
+              <button onclick="cancelCampaign()" style="flex:1;background:#ef4444;color:white;border:none;padding:8px;border-radius:8px;cursor:pointer;font-weight:600;font-size:13px">⏹ Cancel</button>
+            </div>
           </div>
           <button class="btn btn-primary" onclick="sendMessage()" id="sendBtn">📨 Send Message</button>
         </div>
@@ -512,6 +516,38 @@ async function sendMessage() {
     toast('Failed to start campaign', 'error')
     document.getElementById('sendBtn').textContent = '📨 Send Message'
   }
+}
+
+let isPaused = false
+
+async function togglePause() {
+  const btn = document.getElementById('pauseBtn')
+  if (!state.campaignId) return
+  if (!isPaused) {
+    await api('post', `/api/campaigns/${state.campaignId}/pause`)
+    isPaused = true
+    btn.textContent = '▶ Resume'
+    btn.style.background = '#22c55e'
+    toast('Campaign paused')
+  } else {
+    await api('post', `/api/campaigns/${state.campaignId}/resume`)
+    isPaused = false
+    btn.textContent = '⏸ Pause'
+    btn.style.background = '#f59e0b'
+    toast('Campaign resumed')
+  }
+}
+
+async function cancelCampaign() {
+  if (!state.campaignId) return
+  if (!confirm('Cancel this campaign?')) return
+  await api('post', `/api/campaigns/${state.campaignId}/cancel`)
+  clearInterval(state.progressInterval)
+  isPaused = false
+  document.getElementById('sendBtn').textContent = '📨 Send Message'
+  document.getElementById('pauseBtn').textContent = '⏸ Pause'
+  document.getElementById('pauseBtn').style.background = '#f59e0b'
+  toast('Campaign cancelled')
 }
 
 async function checkProgress() {
