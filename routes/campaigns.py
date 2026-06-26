@@ -1,13 +1,17 @@
 from fastapi import APIRouter, HTTPException, BackgroundTasks, UploadFile, File, Form
+from fastapi import Request
 from database import supabase
 from telegram_client import get_client
-from typing import Optional, List
+from typing import Optional
 import asyncio, datetime, os, tempfile
 
 router = APIRouter()
 
-async def send_bulk(campaign_id: str, client, chat_ids: list, message: str, delay: int, file_path: str = None, file_type: str = None, parse_mode: str = "markdown"):
-    supabase.table("campaigns").update({"status": "running", "started_at": datetime.datetime.utcnow().isoformat()}).eq("id", campaign_id).execute()
+async def send_bulk(campaign_id, client, chat_ids, message, delay, file_path=None, file_type=None, parse_mode="markdown"):
+    supabase.table("campaigns").update({
+        "status": "running",
+        "started_at": datetime.datetime.utcnow().isoformat()
+    }).eq("id", campaign_id).execute()
     
     sent = 0
     failed = 0
@@ -16,15 +20,13 @@ async def send_bulk(campaign_id: str, client, chat_ids: list, message: str, dela
         try:
             if file_path and os.path.exists(file_path):
                 if file_type == "photo":
-                    await client.send_photo(chat_id, file_path, caption=message, parse_mode=parse_mode)
+                    await client.send_photo(chat_id, file_path, caption=message or None, parse_mode=parse_mode if message else None)
                 elif file_type == "audio":
-                    await client.send_audio(chat_id, file_path, caption=message)
+                    await client.send_audio(chat_id, file_path, caption=message or None)
                 elif file_type == "video":
-                    await client.send_video(chat_id, file_path, caption=message, parse_mode=parse_mode)
-                elif file_type == "document":
-                    await client.send_document(chat_id, file_path, caption=message)
+                    await client.send_video(chat_id, file_path, caption=message or None, parse_mode=parse_mode if message else None)
                 else:
-                    await client.send_message(chat_id, message, parse_mode=parse_mode)
+                    await client.send_document(chat_id, file_path, caption=message or None)
             else:
                 await client.send_message(chat_id, message, parse_mode=parse_mode)
             sent += 1
@@ -39,18 +41,18 @@ async def send_bulk(campaign_id: str, client, chat_ids: list, message: str, dela
                 "campaign_id": campaign_id,
                 "chat_id": chat_id,
                 "status": "failed",
-                "error_message": str(e)
+                "error_message": str(e)[:200]
             }).execute()
         
-        supabase.table("campaigns").update({"sent_count": sent, "failed_count": failed}).eq("id", campaign_id).execute()
+        supabase.table("campaigns").update({
+            "sent_count": sent,
+            "failed_count": failed
+        }).eq("id", campaign_id).execute()
         await asyncio.sleep(delay)
     
-    # Cleanup temp file
     if file_path and os.path.exists(file_path):
-        try:
-            os.remove(file_path)
-        except:
-            pass
+        try: os.remove(file_path)
+        except: pass
     
     supabase.table("campaigns").update({
         "status": "completed",
@@ -71,7 +73,6 @@ async def send_campaign(
 ):
     ids = [int(x) for x in chat_ids.split(",") if x.strip()]
     
-    # Handle file upload
     file_path = None
     file_type = None
     if file and file.filename:
@@ -86,7 +87,8 @@ async def send_campaign(
             file_type = "document"
         
         tmp = tempfile.NamedTemporaryFile(delete=False, suffix=f".{ext}")
-        tmp.write(await file.read())
+        content = await file.read()
+        tmp.write(content)
         tmp.close()
         file_path = tmp.name
 
@@ -101,7 +103,10 @@ async def send_campaign(
     
     campaign_id = campaign.data[0]["id"]
     client = await get_client(account_number)
-    background_tasks.add_task(send_bulk, campaign_id, client, ids, message, delay_seconds, file_path, file_type, parse_mode)
+    background_tasks.add_task(
+        send_bulk, campaign_id, client, ids,
+        message, delay_seconds, file_path, file_type, parse_mode
+    )
     
     return {"campaign_id": campaign_id, "status": "started", "total": len(ids)}
 
