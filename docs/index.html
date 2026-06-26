@@ -177,7 +177,10 @@
               <label style="color:#94a3b8;font-size:12px;display:block;margin-bottom:4px">Attach File (optional)</label>
               <input type="file" id="fileInput" accept="image/*,audio/*,video/*,.pdf,.doc,.docx,.zip"
                 style="background:#0f172a;border:1px solid #334155;border-radius:8px;padding:8px;color:#94a3b8;width:100%;font-size:12px;box-sizing:border-box">
-              <p id="fileInfo" style="color:#60a5fa;font-size:11px;margin-top:4px"></p>
+              <div style="display:flex;align-items:center;gap:8px;margin-top:4px">
+                <p id="fileInfo" style="color:#60a5fa;font-size:11px;flex:1"></p>
+                <button id="removeFileBtn" onclick="removeFile()" style="display:none;background:#ef4444;border:none;color:white;padding:2px 8px;border-radius:6px;cursor:pointer;font-size:11px">✕ Remove</button>
+              </div>
             </div>
             <div style="margin-top:12px">
               <label style="color:#94a3b8;font-size:12px;display:block;margin-bottom:4px">Delay between messages (seconds)</label>
@@ -678,10 +681,21 @@ document.addEventListener('DOMContentLoaded', () => {
   const fi = document.getElementById('fileInput')
   if (fi) fi.addEventListener('change', () => {
     const f = fi.files[0]
-    if (f) document.getElementById('fileInfo').textContent = `📎 ${f.name} (${(f.size/1024).toFixed(1)}KB)`
-    else document.getElementById('fileInfo').textContent = ''
+    if (f) {
+      document.getElementById('fileInfo').textContent = `📎 ${f.name} (${(f.size/1024).toFixed(1)}KB)`
+      document.getElementById('removeFileBtn').style.display = 'block'
+    } else {
+      document.getElementById('fileInfo').textContent = ''
+      document.getElementById('removeFileBtn').style.display = 'none'
+    }
   })
 })
+
+function removeFile() {
+  document.getElementById('fileInput').value = ''
+  document.getElementById('fileInfo').textContent = ''
+  document.getElementById('removeFileBtn').style.display = 'none'
+}
 
 // Init - No login required
 window.onload = () => {
