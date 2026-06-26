@@ -310,14 +310,16 @@ function setAccount(n) {
 
 async function connectAccount() {
   const btn = document.getElementById('connectBtn')
+  const accountNum = state.account
   btn.textContent = 'Connecting...'
   try {
-    const res = await api('get', `/test-connect/${state.account}`)
+    const res = await api('get', `/test-connect/${accountNum}`)
     if (res.success) {
       btn.textContent = `✅ ${res.name}`
       btn.style.background = '#166534'
       toast(`Connected: ${res.name}`)
       loadDashboard()
+      loadFolders()
     } else {
       btn.textContent = 'Connect Account'
       toast('Connect failed: ' + res.error, 'error')
@@ -351,7 +353,7 @@ async function loadDashboard() {
 }
 
 async function loadFolders() {
-  document.getElementById('folderList').innerHTML = '<p class="text-slate-400 text-sm">Loading...</p>'
+  document.getElementById('folderList').innerHTML = '<p style="color:#94a3b8;font-size:13px">Loading folders...</p>'
   try {
     const folders = await api('get', `/api/folders/${state.account}`)
     state.folders = folders
