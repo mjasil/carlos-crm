@@ -1,0 +1,558 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>CARLOS CRM</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<script src="https://cdn.jsdelivr.net/npm/axios/dist/axios.min.js"></script>
+<style>
+  body { background: #0f172a; color: #f1f5f9; font-family: sans-serif; }
+  .card { background: #1e293b; border: 1px solid #334155; border-radius: 12px; padding: 20px; }
+  .input { background: #0f172a; border: 1px solid #334155; border-radius: 8px; padding: 10px 14px; color: #f1f5f9; width: 100%; outline: none; box-sizing: border-box; }
+  .input:focus { border-color: #2563eb; }
+  .btn { padding: 10px 20px; border-radius: 8px; font-weight: 600; cursor: pointer; border: none; transition: all 0.2s; width: 100%; }
+  .btn-primary { background: #2563eb; color: white; }
+  .btn-primary:hover { background: #1d4ed8; }
+  .btn-secondary { background: #334155; color: #f1f5f9; }
+  .nav-link { display: flex; align-items: center; gap: 10px; padding: 10px 12px; border-radius: 8px; cursor: pointer; color: #94a3b8; transition: all 0.2s; text-decoration: none; }
+  .nav-link:hover, .nav-link.active { background: #2563eb; color: white; }
+  .toast { position: fixed; top: 20px; right: 20px; padding: 12px 20px; border-radius: 8px; font-size: 14px; z-index: 9999; animation: fadeIn 0.3s; }
+  .toast-success { background: #166534; color: #86efac; }
+  .toast-error { background: #7f1d1d; color: #fca5a5; }
+  @keyframes fadeIn { from { opacity: 0; transform: translateY(-10px); } to { opacity: 1; transform: translateY(0); } }
+  .progress-bar { background: #0f172a; border-radius: 999px; height: 10px; overflow: hidden; }
+  .progress-fill { background: #2563eb; height: 100%; border-radius: 999px; transition: width 0.5s; }
+  .badge { font-size: 11px; padding: 2px 8px; border-radius: 999px; font-weight: 600; }
+  .badge-green { background: #14532d; color: #4ade80; }
+  .badge-blue { background: #1e3a5f; color: #60a5fa; }
+  .badge-gray { background: #1e293b; color: #94a3b8; }
+  .badge-red { background: #450a0a; color: #f87171; }
+  .sidebar { width: 240px; min-height: 100vh; background: #1e293b; border-right: 1px solid #334155; display: flex; flex-direction: column; position: fixed; left: 0; top: 0; }
+  .main { margin-left: 240px; padding: 24px; min-height: 100vh; }
+  .tag { display: inline-block; padding: 2px 8px; border-radius: 999px; font-size: 11px; cursor: pointer; }
+  .tag-active { background: #2563eb; color: white; }
+  .tag-inactive { background: #1e293b; color: #94a3b8; border: 1px solid #334155; }
+</style>
+</head>
+<body>
+
+<!-- LOGIN PAGE -->
+<div id="loginPage" class="min-h-screen flex items-center justify-center px-4">
+  <div class="card w-full" style="max-width:400px">
+    <div class="text-center mb-8">
+      <h1 class="text-3xl font-bold text-white">CARLOS</h1>
+      <p class="text-slate-400 mt-1 text-sm">Telegram CRM Dashboard</p>
+    </div>
+    <div style="display:flex;flex-direction:column;gap:16px">
+      <div>
+        <label class="text-slate-400 text-xs mb-1 block">Email</label>
+        <input class="input" id="loginEmail" type="email" placeholder="your@email.com">
+      </div>
+      <div>
+        <label class="text-slate-400 text-xs mb-1 block">Password</label>
+        <input class="input" id="loginPassword" type="password" placeholder="••••••••">
+      </div>
+      <button class="btn btn-primary" onclick="login()">Login</button>
+      <p class="text-center text-slate-500 text-xs">First time? <span class="text-blue-400 cursor-pointer" onclick="showRegister()">Create account</span></p>
+    </div>
+  </div>
+</div>
+
+<!-- REGISTER MODAL -->
+<div id="registerModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.7);z-index:100;display:none;align-items:center;justify-content:center">
+  <div class="card" style="width:90%;max-width:400px">
+    <h2 class="font-bold text-white mb-4">Create Account</h2>
+    <div style="display:flex;flex-direction:column;gap:12px">
+      <input class="input" id="regName" placeholder="Full name">
+      <input class="input" id="regEmail" type="email" placeholder="Email">
+      <input class="input" id="regPassword" type="password" placeholder="Password">
+      <select class="input" id="regRole">
+        <option value="admin">Admin</option>
+        <option value="member">Member</option>
+      </select>
+      <button class="btn btn-primary" onclick="register()">Register</button>
+      <button class="btn btn-secondary" onclick="document.getElementById('registerModal').style.display='none'">Cancel</button>
+    </div>
+  </div>
+</div>
+
+<!-- MAIN APP -->
+<div id="app" style="display:none">
+  <!-- SIDEBAR -->
+  <div class="sidebar">
+    <div style="padding:20px;border-bottom:1px solid #334155">
+      <h1 class="text-lg font-bold text-white">⚡ CARLOS CRM</h1>
+      <p class="text-slate-400 text-xs mt-1" id="sidebarUser"></p>
+    </div>
+    <div style="padding:12px;border-bottom:1px solid #334155">
+      <p class="text-xs text-slate-400 mb-2">ACTIVE ACCOUNT</p>
+      <div style="display:flex;gap:8px">
+        <button onclick="setAccount(1)" id="acc1btn" class="btn btn-primary" style="flex:1;padding:8px;font-size:13px">Account 1</button>
+        <button onclick="setAccount(2)" id="acc2btn" class="btn btn-secondary" style="flex:1;padding:8px;font-size:13px">Account 2</button>
+      </div>
+    </div>
+    <nav style="padding:12px;flex:1;display:flex;flex-direction:column;gap:4px">
+      <a class="nav-link active" onclick="showPage('dashboard')" id="nav-dashboard">🏠 Dashboard</a>
+      <a class="nav-link" onclick="showPage('send')" id="nav-send">📨 Send Message</a>
+      <a class="nav-link" onclick="showPage('campaigns')" id="nav-campaigns">📊 Campaigns</a>
+      <a class="nav-link" onclick="showPage('templates')" id="nav-templates">📋 Templates</a>
+      <a class="nav-link" onclick="showPage('contacts')" id="nav-contacts">👥 Contacts</a>
+      <a class="nav-link" onclick="showPage('team')" id="nav-team">⚙️ Team</a>
+    </nav>
+    <div style="padding:12px;border-top:1px solid #334155">
+      <button class="btn btn-secondary" onclick="logout()" style="font-size:13px">🚪 Logout</button>
+    </div>
+  </div>
+
+  <!-- MAIN CONTENT -->
+  <div class="main">
+
+    <!-- DASHBOARD -->
+    <div id="page-dashboard">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:24px">
+        <div>
+          <h1 class="text-2xl font-bold text-white">Dashboard</h1>
+          <p class="text-slate-400 text-sm" id="dashAccountLabel">Account 1 active</p>
+        </div>
+        <button class="btn btn-primary" onclick="connectAccount()" id="connectBtn" style="width:auto;padding:10px 16px;font-size:13px">Connect Account</button>
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:24px">
+        <div class="card"><div style="color:#60a5fa;margin-bottom:8px;font-size:20px">📨</div><div class="text-2xl font-bold" id="statSent">0</div><div class="text-slate-400 text-sm">Total Sent</div></div>
+        <div class="card"><div style="color:#f87171;margin-bottom:8px;font-size:20px">❌</div><div class="text-2xl font-bold" id="statFailed">0</div><div class="text-slate-400 text-sm">Failed</div></div>
+        <div class="card"><div style="color:#facc15;margin-bottom:8px;font-size:20px">📊</div><div class="text-2xl font-bold" id="statCampaigns">0</div><div class="text-slate-400 text-sm">Campaigns</div></div>
+        <div class="card"><div style="color:#4ade80;margin-bottom:8px;font-size:20px">✅</div><div class="text-2xl font-bold" id="statCompleted">0</div><div class="text-slate-400 text-sm">Completed</div></div>
+      </div>
+      <div class="card">
+        <h2 class="font-semibold text-white mb-4">Recent Campaigns</h2>
+        <div id="recentCampaigns"><p class="text-slate-400 text-sm">Loading...</p></div>
+      </div>
+    </div>
+
+    <!-- SEND MESSAGE -->
+    <div id="page-send" style="display:none">
+      <h1 class="text-2xl font-bold text-white mb-6">Send Message</h1>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:24px">
+        <div>
+          <div class="card mb-4">
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
+              <h2 class="font-semibold text-white">Select Folder</h2>
+              <button onclick="loadFolders()" style="background:none;border:none;color:#94a3b8;cursor:pointer;font-size:18px">↻</button>
+            </div>
+            <div id="folderList"><p class="text-slate-400 text-sm">Click ↻ to load folders</p></div>
+          </div>
+          <div class="card" id="chatFilterCard" style="display:none">
+            <h2 class="font-semibold text-white mb-3">Filter Chats</h2>
+            <div style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:12px" id="filterTags"></div>
+            <p class="text-slate-400 text-sm"><span id="chatCount">0</span> chats selected</p>
+            <div id="chatList" style="max-height:150px;overflow-y:auto;margin-top:8px;display:flex;flex-direction:column;gap:4px"></div>
+          </div>
+        </div>
+        <div>
+          <div class="card mb-4">
+            <h2 class="font-semibold text-white mb-3">Compose Message</h2>
+            <div style="margin-bottom:12px">
+              <label class="text-slate-400 text-xs mb-1 block">Load Template</label>
+              <select class="input" id="templateSelect" onchange="loadTemplate()" style="font-size:13px">
+                <option value="">Select template...</option>
+              </select>
+            </div>
+            <textarea class="input" id="messageText" placeholder="Type your message..." style="min-height:140px;resize:none"></textarea>
+            <div style="margin-top:12px">
+              <label class="text-slate-400 text-xs mb-1 block">Delay between messages (seconds)</label>
+              <input class="input" type="number" id="delayInput" value="3" min="1" max="30">
+            </div>
+          </div>
+          <div class="card mb-4" id="progressCard" style="display:none">
+            <h2 class="font-semibold text-white mb-3">Sending Progress</h2>
+            <div class="progress-bar mb-2"><div class="progress-fill" id="progressFill" style="width:0%"></div></div>
+            <div style="display:flex;justify-content:space-between;font-size:13px">
+              <span style="color:#4ade80">✅ <span id="progressSent">0</span> sent</span>
+              <span class="text-slate-400"><span id="progressPct">0</span>%</span>
+              <span style="color:#f87171">❌ <span id="progressFailed">0</span> failed</span>
+            </div>
+            <p class="text-center text-slate-400 text-xs mt-2" id="progressStatus"></p>
+          </div>
+          <button class="btn btn-primary" onclick="sendMessage()" id="sendBtn">📨 Send Message</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- CAMPAIGNS -->
+    <div id="page-campaigns" style="display:none">
+      <h1 class="text-2xl font-bold text-white mb-6">Campaigns</h1>
+      <div id="campaignList"><p class="text-slate-400">Loading...</p></div>
+    </div>
+
+    <!-- TEMPLATES -->
+    <div id="page-templates" style="display:none">
+      <h1 class="text-2xl font-bold text-white mb-6">Message Templates</h1>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:24px">
+        <div class="card">
+          <h2 class="font-semibold text-white mb-4">Create Template</h2>
+          <div style="display:flex;flex-direction:column;gap:12px">
+            <input class="input" id="tplTitle" placeholder="Template name">
+            <textarea class="input" id="tplMessage" placeholder="Message content..." style="min-height:120px;resize:none"></textarea>
+            <button class="btn btn-primary" onclick="createTemplate()">+ Save Template</button>
+          </div>
+        </div>
+        <div id="templateList"><p class="text-slate-400">No templates yet.</p></div>
+      </div>
+    </div>
+
+    <!-- CONTACTS -->
+    <div id="page-contacts" style="display:none">
+      <h1 class="text-2xl font-bold text-white mb-6">Contacts</h1>
+      <input class="input mb-4" id="contactSearch" placeholder="Search contacts..." oninput="filterContacts()">
+      <div class="card" id="contactList"><p class="text-slate-400">No contacts yet.</p></div>
+    </div>
+
+    <!-- TEAM -->
+    <div id="page-team" style="display:none">
+      <h1 class="text-2xl font-bold text-white mb-6">Team Management</h1>
+      <div class="card" style="max-width:420px">
+        <h2 class="font-semibold text-white mb-4">Add Team Member</h2>
+        <div style="display:flex;flex-direction:column;gap:12px">
+          <input class="input" id="teamName" placeholder="Full name">
+          <input class="input" id="teamEmail" type="email" placeholder="Email">
+          <input class="input" id="teamPassword" type="password" placeholder="Password">
+          <select class="input" id="teamRole">
+            <option value="member">Member</option>
+            <option value="admin">Admin</option>
+          </select>
+          <button class="btn btn-primary" onclick="addTeamMember()">+ Add Member</button>
+        </div>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<script>
+const API = 'https://carlos-crm.onrender.com'
+let state = { account: 1, folders: [], chats: [], filter: 'all', campaignId: null, contacts: [], progressInterval: null }
+
+const api = async (method, path, data) => {
+  const token = localStorage.getItem('carlos_token')
+  const res = await axios({ method, url: API + path, data, headers: token ? { Authorization: `Bearer ${token}` } : {} })
+  return res.data
+}
+
+function toast(msg, type='success') {
+  const t = document.createElement('div')
+  t.className = `toast toast-${type}`
+  t.textContent = msg
+  document.body.appendChild(t)
+  setTimeout(() => t.remove(), 3000)
+}
+
+function showRegister() { document.getElementById('registerModal').style.display = 'flex' }
+
+async function login() {
+  const email = document.getElementById('loginEmail').value
+  const password = document.getElementById('loginPassword').value
+  if (!email || !password) return toast('Fill all fields', 'error')
+  try {
+    const res = await api('post', '/api/auth/login', { email, password })
+    localStorage.setItem('carlos_token', res.token)
+    localStorage.setItem('carlos_user', JSON.stringify(res.user))
+    showApp(res.user)
+    toast('Welcome back!')
+  } catch (e) { toast(e.response?.data?.detail || 'Login failed', 'error') }
+}
+
+async function register() {
+  const name = document.getElementById('regName').value
+  const email = document.getElementById('regEmail').value
+  const password = document.getElementById('regPassword').value
+  const role = document.getElementById('regRole').value
+  try {
+    await api('post', '/api/auth/register', { name, email, password, role })
+    toast('Account created! Login now.')
+    document.getElementById('registerModal').style.display = 'none'
+  } catch (e) { toast('Failed', 'error') }
+}
+
+function showApp(user) {
+  document.getElementById('loginPage').style.display = 'none'
+  document.getElementById('app').style.display = 'block'
+  document.getElementById('sidebarUser').textContent = user?.name || 'Admin'
+  loadDashboard()
+  loadTemplatesDropdown()
+}
+
+function logout() {
+  localStorage.removeItem('carlos_token')
+  localStorage.removeItem('carlos_user')
+  document.getElementById('app').style.display = 'none'
+  document.getElementById('loginPage').style.display = 'flex'
+}
+
+function showPage(name) {
+  ['dashboard','send','campaigns','templates','contacts','team'].forEach(p => {
+    document.getElementById('page-'+p).style.display = p === name ? 'block' : 'none'
+    document.getElementById('nav-'+p).classList.toggle('active', p === name)
+  })
+  if (name === 'campaigns') loadCampaigns()
+  if (name === 'templates') loadTemplates()
+  if (name === 'contacts') loadContacts()
+}
+
+function setAccount(n) {
+  state.account = n
+  document.getElementById('acc1btn').className = `btn ${n===1?'btn-primary':'btn-secondary'}` + ' ' + 'flex:1;padding:8px;font-size:13px'
+  document.getElementById('acc2btn').className = `btn ${n===2?'btn-primary':'btn-secondary'}` + ' ' + 'flex:1;padding:8px;font-size:13px'
+  document.getElementById('acc1btn').style.cssText = 'flex:1;padding:8px;font-size:13px;' + (n===1?'background:#2563eb;color:white':'background:#334155;color:#f1f5f9')
+  document.getElementById('acc2btn').style.cssText = 'flex:1;padding:8px;font-size:13px;' + (n===2?'background:#2563eb;color:white':'background:#334155;color:#f1f5f9')
+  document.getElementById('dashAccountLabel').textContent = `Account ${n} active`
+  state.folders = []; state.chats = []
+}
+
+async function connectAccount() {
+  const btn = document.getElementById('connectBtn')
+  btn.textContent = 'Connecting...'
+  try {
+    const res = await api('post', `/api/accounts/connect/${state.account}`)
+    btn.textContent = `✅ ${res.name}`
+    btn.style.background = '#166534'
+    toast(`Connected: ${res.name}`)
+    loadDashboard()
+  } catch { btn.textContent = 'Connect Account'; toast('Connect failed - OTP needed on first run', 'error') }
+}
+
+async function loadDashboard() {
+  try {
+    const campaigns = await api('get', '/api/campaigns/')
+    const sent = campaigns.reduce((a,c) => a + (c.sent_count||0), 0)
+    const failed = campaigns.reduce((a,c) => a + (c.failed_count||0), 0)
+    const completed = campaigns.filter(c => c.status==='completed').length
+    document.getElementById('statSent').textContent = sent
+    document.getElementById('statFailed').textContent = failed
+    document.getElementById('statCampaigns').textContent = campaigns.length
+    document.getElementById('statCompleted').textContent = completed
+    const recent = campaigns.slice(0,5)
+    document.getElementById('recentCampaigns').innerHTML = recent.length ? recent.map(c => `
+      <div style="display:flex;justify-content:space-between;align-items:center;padding:10px 0;border-bottom:1px solid #334155">
+        <div>
+          <p style="color:white;font-size:14px">${(c.message||'').slice(0,50)}...</p>
+          <p style="color:#94a3b8;font-size:12px">By ${c.sent_by} • ${c.sent_count}/${c.total_chats}</p>
+        </div>
+        <span class="badge ${c.status==='completed'?'badge-green':c.status==='running'?'badge-blue':'badge-gray'}">${c.status}</span>
+      </div>`).join('') : '<p class="text-slate-400 text-sm">No campaigns yet</p>'
+  } catch {}
+}
+
+async function loadFolders() {
+  document.getElementById('folderList').innerHTML = '<p class="text-slate-400 text-sm">Loading...</p>'
+  try {
+    const folders = await api('get', `/api/folders/${state.account}`)
+    state.folders = folders
+    document.getElementById('folderList').innerHTML = folders.length ? folders.map(f => `
+      <button onclick="selectFolder(${f.id},'${f.title}')" style="width:100%;text-align:left;padding:10px 12px;border-radius:8px;margin-bottom:4px;background:#0f172a;color:#cbd5e1;border:none;cursor:pointer;font-size:14px" id="folder-${f.id}">
+        📁 ${f.title}
+      </button>`).join('') : '<p class="text-slate-400 text-sm">No folders found. Connect account first.</p>'
+  } catch { document.getElementById('folderList').innerHTML = '<p style="color:#f87171;font-size:13px">Connect account first from Dashboard</p>' }
+}
+
+async function selectFolder(id, title) {
+  document.querySelectorAll('[id^=folder-]').forEach(b => b.style.background = '#0f172a')
+  document.getElementById('folder-'+id).style.background = '#2563eb'
+  state.selectedFolder = { id, title }
+  document.getElementById('chatFilterCard').style.display = 'block'
+  document.getElementById('chatList').innerHTML = '<p class="text-slate-400 text-sm">Loading chats...</p>'
+  try {
+    const res = await api('get', `/api/folders/${state.account}/${id}/chats`)
+    state.chats = res.chats
+    state.filter = 'all'
+    renderChats()
+    loadTemplatesDropdown()
+  } catch { toast('Failed to load chats', 'error') }
+}
+
+function renderChats() {
+  const types = ['all', ...new Set(state.chats.map(c => c.type))]
+  document.getElementById('filterTags').innerHTML = types.map(t => `
+    <span class="tag ${state.filter===t?'tag-active':'tag-inactive'}" onclick="setFilter('${t}')">${t}</span>`).join('')
+  const filtered = state.filter === 'all' ? state.chats : state.chats.filter(c => c.type === state.filter)
+  document.getElementById('chatCount').textContent = filtered.length
+  document.getElementById('chatList').innerHTML = filtered.slice(0,30).map(c => `
+    <div style="font-size:12px;color:#cbd5e1;padding:4px 8px;background:#0f172a;border-radius:6px">${c.name} <span style="color:#64748b">• ${c.type}</span></div>`).join('')
+  if (filtered.length > 30) document.getElementById('chatList').innerHTML += `<p style="color:#64748b;font-size:12px;padding:4px 8px">+${filtered.length-30} more</p>`
+}
+
+function setFilter(f) { state.filter = f; renderChats() }
+
+async function loadTemplatesDropdown() {
+  try {
+    const tpls = await api('get', '/api/templates/')
+    const sel = document.getElementById('templateSelect')
+    sel.innerHTML = '<option value="">Select template...</option>' + tpls.map(t => `<option value="${t.id}" data-msg="${encodeURIComponent(t.message)}">${t.title}</option>`).join('')
+  } catch {}
+}
+
+function loadTemplate() {
+  const sel = document.getElementById('templateSelect')
+  const opt = sel.selectedOptions[0]
+  if (opt && opt.dataset.msg) document.getElementById('messageText').value = decodeURIComponent(opt.dataset.msg)
+}
+
+async function sendMessage() {
+  const message = document.getElementById('messageText').value
+  const delay = parseInt(document.getElementById('delayInput').value) || 3
+  if (!message) return toast('Write a message first', 'error')
+  if (!state.selectedFolder) return toast('Select a folder first', 'error')
+  const filtered = state.filter === 'all' ? state.chats : state.chats.filter(c => c.type === state.filter)
+  if (!filtered.length) return toast('No chats found', 'error')
+  const user = JSON.parse(localStorage.getItem('carlos_user') || '{}')
+  document.getElementById('sendBtn').textContent = 'Sending...'
+  document.getElementById('progressCard').style.display = 'block'
+  try {
+    const res = await api('post', '/api/campaigns/send', {
+      account_number: state.account,
+      folder_id: state.selectedFolder.id,
+      message, delay_seconds: delay,
+      chat_ids: filtered.map(c => c.chat_id),
+      sent_by: user.name || 'admin'
+    })
+    state.campaignId = res.campaign_id
+    toast(`Sending to ${filtered.length} chats...`)
+    state.progressInterval = setInterval(checkProgress, 2000)
+  } catch { toast('Failed to start campaign', 'error'); document.getElementById('sendBtn').textContent = '📨 Send Message' }
+}
+
+async function checkProgress() {
+  if (!state.campaignId) return
+  try {
+    const p = await api('get', `/api/campaigns/${state.campaignId}/progress`)
+    document.getElementById('progressFill').style.width = p.progress_percent + '%'
+    document.getElementById('progressSent').textContent = p.sent
+    document.getElementById('progressFailed').textContent = p.failed
+    document.getElementById('progressPct').textContent = p.progress_percent
+    document.getElementById('progressStatus').textContent = p.status
+    if (p.status === 'completed' || p.status === 'failed') {
+      clearInterval(state.progressInterval)
+      document.getElementById('sendBtn').textContent = '📨 Send Message'
+      toast('Campaign completed!')
+    }
+  } catch {}
+}
+
+async function loadCampaigns() {
+  try {
+    const campaigns = await api('get', '/api/campaigns/')
+    document.getElementById('campaignList').innerHTML = campaigns.length ? campaigns.map(c => `
+      <div class="card mb-4">
+        <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:12px">
+          <div style="flex:1">
+            <p style="color:white;font-size:14px;font-weight:500">${(c.message||'').slice(0,80)}...</p>
+            <p style="color:#94a3b8;font-size:12px;margin-top:4px">By ${c.sent_by} • ${new Date(c.created_at).toLocaleString()}</p>
+          </div>
+          <span class="badge ${c.status==='completed'?'badge-green':c.status==='running'?'badge-blue':c.status==='failed'?'badge-red':'badge-gray'}" style="margin-left:12px">${c.status}</span>
+        </div>
+        <div class="progress-bar mb-2"><div class="progress-fill" style="width:${c.total_chats?((c.sent_count+c.failed_count)/c.total_chats*100):0}%"></div></div>
+        <div style="display:flex;gap:16px;font-size:12px">
+          <span style="color:#4ade80">✅ ${c.sent_count} sent</span>
+          <span style="color:#f87171">❌ ${c.failed_count} failed</span>
+          <span style="color:#94a3b8">Total: ${c.total_chats}</span>
+        </div>
+      </div>`).join('') : '<p class="text-slate-400">No campaigns yet.</p>'
+  } catch {}
+}
+
+async function loadTemplates() {
+  try {
+    const tpls = await api('get', '/api/templates/')
+    document.getElementById('templateList').innerHTML = tpls.length ? tpls.map(t => `
+      <div class="card mb-3">
+        <div style="display:flex;justify-content:space-between;align-items:flex-start">
+          <div>
+            <p style="color:white;font-weight:500">${t.title}</p>
+            <p style="color:#94a3b8;font-size:13px;margin-top:4px">${(t.message||'').slice(0,100)}...</p>
+          </div>
+          <button onclick="deleteTemplate('${t.id}')" style="background:none;border:none;color:#f87171;cursor:pointer;font-size:18px;margin-left:8px">🗑</button>
+        </div>
+      </div>`).join('') : '<p class="text-slate-400">No templates yet.</p>'
+  } catch {}
+}
+
+async function createTemplate() {
+  const title = document.getElementById('tplTitle').value
+  const message = document.getElementById('tplMessage').value
+  if (!title || !message) return toast('Fill all fields', 'error')
+  try {
+    await api('post', '/api/templates/', { title, message })
+    toast('Template saved!')
+    document.getElementById('tplTitle').value = ''
+    document.getElementById('tplMessage').value = ''
+    loadTemplates()
+    loadTemplatesDropdown()
+  } catch { toast('Failed', 'error') }
+}
+
+async function deleteTemplate(id) {
+  await api('delete', `/api/templates/${id}`)
+  toast('Deleted')
+  loadTemplates()
+}
+
+let allContacts = []
+async function loadContacts() {
+  try {
+    allContacts = await api('get', '/api/contacts/')
+    renderContacts(allContacts)
+  } catch {}
+}
+
+function filterContacts() {
+  const q = document.getElementById('contactSearch').value.toLowerCase()
+  renderContacts(allContacts.filter(c => (c.name||'').toLowerCase().includes(q) || (c.username||'').toLowerCase().includes(q)))
+}
+
+function renderContacts(contacts) {
+  document.getElementById('contactList').innerHTML = contacts.length ? contacts.map(c => `
+    <div style="display:flex;justify-content:space-between;align-items:center;padding:10px 0;border-bottom:1px solid #334155">
+      <div>
+        <p style="color:white;font-size:14px;font-weight:500">${c.name||'Unknown'}</p>
+        <p style="color:#94a3b8;font-size:12px">@${c.username||'-'} • ${c.chat_type||'-'} • ₹${c.deposit_amount||0}</p>
+      </div>
+      <select onchange="updateContact('${c.id}',this.value)" style="background:#0f172a;border:1px solid #334155;color:#cbd5e1;font-size:12px;border-radius:6px;padding:4px 8px">
+        <option ${c.status==='active'?'selected':''}>active</option>
+        <option ${c.status==='inactive'?'selected':''}>inactive</option>
+        <option ${c.status==='vip'?'selected':''}>vip</option>
+      </select>
+    </div>`).join('') : '<p class="text-slate-400">No contacts found.</p>'
+}
+
+async function updateContact(id, status) {
+  await api('put', `/api/contacts/${id}`, { status })
+  toast('Updated!')
+}
+
+async function addTeamMember() {
+  const name = document.getElementById('teamName').value
+  const email = document.getElementById('teamEmail').value
+  const password = document.getElementById('teamPassword').value
+  const role = document.getElementById('teamRole').value
+  if (!name || !email || !password) return toast('Fill all fields', 'error')
+  try {
+    await api('post', '/api/auth/register', { name, email, password, role })
+    toast('Team member added!')
+    document.getElementById('teamName').value = ''
+    document.getElementById('teamEmail').value = ''
+    document.getElementById('teamPassword').value = ''
+  } catch (e) { toast(e.response?.data?.detail || 'Failed', 'error') }
+}
+
+// Init
+window.onload = () => {
+  const token = localStorage.getItem('carlos_token')
+  const user = JSON.parse(localStorage.getItem('carlos_user') || 'null')
+  if (token && user) {
+    document.getElementById('loginPage').style.display = 'none'
+    showApp(user)
+  }
+  setAccount(1)
+}
+</script>
+</body>
+</html>
