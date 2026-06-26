@@ -30,7 +30,7 @@ async def get_folders(account_number: int):
         raise HTTPException(status_code=400, detail=str(e))
 
 @router.get("/{account_number}/{folder_id}/chats")
-async def get_folder_chats(account_number: int, folder_id: int):
+async def get_folder_chats(account_number: int, folder_id: int, limit: int = 50):
     try:
         client = await get_client(account_number)
         filters = await fetch_filters(client)
@@ -44,14 +44,16 @@ async def get_folder_chats(account_number: int, folder_id: int):
         if not target:
             raise HTTPException(status_code=404, detail="Folder not found")
         
-        peers = getattr(target, 'include_peers', []) or []
-        pinned = getattr(target, 'pinned_peers', []) or []
-        all_peers = list(peers) + list(pinned)
+        peers = list(getattr(target, 'include_peers', []) or [])
+        pinned = list(getattr(target, 'pinned_peers', []) or [])
+        all_peers = peers + pinned
+        
+        # Limit peers to avoid timeout
+        all_peers = all_peers[:limit]
         
         chats = []
         for peer in all_peers:
             try:
-                # Get ID and type directly from peer object
                 if isinstance(peer, InputPeerUser):
                     peer_id = peer.user_id
                     chat_type = "personal"
