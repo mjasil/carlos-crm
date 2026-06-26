@@ -1,20 +1,25 @@
 from fastapi import APIRouter, HTTPException
 from telegram_client import get_client
+from pyrogram.raw.functions.messages import GetDialogFilters
 
 router = APIRouter()
+
+async def fetch_filters(client):
+    result = await client.invoke(GetDialogFilters())
+    # result is a list directly
+    if isinstance(result, list):
+        return result
+    # or it has .filters
+    return getattr(result, 'filters', result)
 
 @router.get("/{account_number}")
 async def get_folders(account_number: int):
     try:
         client = await get_client(account_number)
-        
-        # Get all folder filters using raw Telegram API
-        result = await client.invoke(
-            __import__('pyrogram.raw.functions.messages', fromlist=['GetDialogFilters']).GetDialogFilters()
-        )
+        filters = await fetch_filters(client)
         
         folders = []
-        for f in result.filters:
+        for f in filters:
             if hasattr(f, 'title'):
                 folders.append({
                     "id": f.id,
@@ -28,12 +33,10 @@ async def get_folders(account_number: int):
 async def get_folder_chats(account_number: int, folder_id: int):
     try:
         client = await get_client(account_number)
-        
-        from pyrogram.raw.functions.messages import GetDialogFilters
-        result = await client.invoke(GetDialogFilters())
+        filters = await fetch_filters(client)
         
         target = None
-        for f in result.filters:
+        for f in filters:
             if hasattr(f, 'id') and f.id == folder_id:
                 target = f
                 break
@@ -46,7 +49,8 @@ async def get_folder_chats(account_number: int, folder_id: int):
         
         for peer in peers:
             try:
-                chat = await client.get_chat(await client.resolve_peer(peer))
+                resolved = await client.resolve_peer(peer)
+                chat = await client.get_chat(resolved)
                 chat_type = "personal"
                 t = str(chat.type)
                 if "GROUP" in t or "SUPERGROUP" in t:
