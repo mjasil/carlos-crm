@@ -28,9 +28,20 @@
   .badge-blue { background: #1e3a5f; color: #60a5fa; }
   .badge-gray { background: #1e293b; color: #94a3b8; }
   .badge-red { background: #450a0a; color: #f87171; }
-  .sidebar { width: 240px; min-height: 100vh; background: #1e293b; border-right: 1px solid #334155; display: flex; flex-direction: column; position: fixed; left: 0; top: 0; }
-  .main { margin-left: 240px; padding: 24px; min-height: 100vh; }
+  .sidebar { width: 240px; min-height: 100vh; background: #1e293b; border-right: 1px solid #334155; display: flex; flex-direction: column; position: fixed; left: 0; top: 0; z-index: 1000; transition: transform 0.3s; }
+  .sidebar.hidden { transform: translateX(-240px); }
+  .main { margin-left: 240px; padding: 16px; min-height: 100vh; }
+  .menu-btn { display: none; position: fixed; top: 12px; left: 12px; z-index: 1001; background: #2563eb; border: none; color: white; padding: 8px 12px; border-radius: 8px; cursor: pointer; font-size: 18px; }
+  .overlay { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.5); z-index: 999; }
+  @media (max-width: 768px) {
+    .sidebar { transform: translateX(-240px); }
+    .sidebar.open { transform: translateX(0); }
+    .main { margin-left: 0; padding: 12px; padding-top: 56px; }
+    .menu-btn { display: block; }
+    .overlay.open { display: block; }
+  }
   .tag { display: inline-block; padding: 2px 8px; border-radius: 999px; font-size: 11px; cursor: pointer; }
+  @media (max-width: 768px) { .send-grid { grid-template-columns: 1fr !important; } }
   .tag-active { background: #2563eb; color: white; }
   .tag-inactive { background: #1e293b; color: #94a3b8; border: 1px solid #334155; }
 </style>
@@ -79,11 +90,16 @@
 
 <!-- MAIN APP -->
 <div id="app" style="display:none">
+  <button class="menu-btn" onclick="toggleSidebar()">☰</button>
+  <div class="overlay" id="overlay" onclick="closeSidebar()"></div>
   <!-- SIDEBAR -->
-  <div class="sidebar">
-    <div style="padding:20px;border-bottom:1px solid #334155">
-      <h1 class="text-lg font-bold text-white">⚡ CARLOS CRM</h1>
-      <p class="text-slate-400 text-xs mt-1" id="sidebarUser"></p>
+  <div class="sidebar" id="sidebar">
+    <div style="padding:16px 20px;border-bottom:1px solid #334155;display:flex;justify-content:space-between;align-items:center">
+      <div>
+        <h1 class="text-lg font-bold text-white">⚡ CARLOS CRM</h1>
+        <p style="color:#94a3b8;font-size:12px;margin-top:2px" id="sidebarUser"></p>
+      </div>
+      <button onclick="closeSidebar()" style="background:none;border:none;color:#94a3b8;font-size:20px;cursor:pointer;display:none" id="closeBtn">✕</button>
     </div>
     <div style="padding:12px;border-bottom:1px solid #334155">
       <p class="text-xs text-slate-400 mb-2">ACTIVE ACCOUNT</p>
@@ -132,7 +148,7 @@
     <!-- SEND MESSAGE -->
     <div id="page-send" style="display:none">
       <h1 class="text-2xl font-bold text-white mb-6">Send Message</h1>
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:24px">
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px" class="send-grid">
         <div>
           <div class="card mb-4">
             <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
@@ -324,6 +340,25 @@ function showPage(name) {
   if (name === 'campaigns') loadCampaigns()
   if (name === 'templates') loadTemplates()
   if (name === 'contacts') loadContacts()
+  closeSidebar()
+}
+
+function toggleSidebar() {
+  const sidebar = document.getElementById('sidebar')
+  const overlay = document.getElementById('overlay')
+  const closeBtn = document.getElementById('closeBtn')
+  sidebar.classList.toggle('open')
+  overlay.classList.toggle('open')
+  closeBtn.style.display = sidebar.classList.contains('open') ? 'block' : 'none'
+}
+
+function closeSidebar() {
+  const sidebar = document.getElementById('sidebar')
+  const overlay = document.getElementById('overlay')
+  const closeBtn = document.getElementById('closeBtn')
+  sidebar.classList.remove('open')
+  overlay.classList.remove('open')
+  if(closeBtn) closeBtn.style.display = 'none'
 }
 
 function setAccount(n) {
