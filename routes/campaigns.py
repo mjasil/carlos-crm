@@ -9,7 +9,7 @@ router = APIRouter()
 # Global state for pause/cancel
 campaign_controls = {}
 
-async def send_bulk(campaign_id, client, chat_ids, message, delay, file_path=None, file_type=None, parse_mode="md"):
+async def send_bulk(campaign_id, client, chat_ids, message, delay, file_path=None, file_type=None, parse_mode=None):
     campaign_controls[campaign_id] = {"paused": False, "cancelled": False}
     
     supabase.table("campaigns").update({
@@ -47,7 +47,7 @@ async def send_bulk(campaign_id, client, chat_ids, message, delay, file_path=Non
                 else:
                     await client.send_document(chat_id, file_path, caption=message or None)
             else:
-                await client.send_message(chat_id, message, parse_mode=parse_mode)
+                await client.send_message(chat_id, message)
             sent += 1
             supabase.table("campaign_logs").insert({
                 "campaign_id": campaign_id,
