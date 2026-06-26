@@ -30,7 +30,7 @@ async def get_folders(account_number: int):
         raise HTTPException(status_code=400, detail=str(e))
 
 @router.get("/{account_number}/{folder_id}/chats")
-async def get_folder_chats(account_number: int, folder_id: int, limit: int = 50):
+async def get_folder_chats(account_number: int, folder_id: int):
     try:
         client = await get_client(account_number)
         filters = await fetch_filters(client)
@@ -47,34 +47,33 @@ async def get_folder_chats(account_number: int, folder_id: int, limit: int = 50)
         peers = list(getattr(target, 'include_peers', []) or [])
         pinned = list(getattr(target, 'pinned_peers', []) or [])
         all_peers = peers + pinned
-        
-        # Limit peers to avoid timeout
-        all_peers = all_peers[:limit]
-        
-        chats = []
+
+        # Build a set of peer IDs from folder
+        folder_peer_ids = set()
+        peer_types = {}
         for peer in all_peers:
-            try:
-                if isinstance(peer, InputPeerUser):
-                    peer_id = peer.user_id
-                    chat_type = "personal"
-                    chat = await client.get_chat(peer_id)
-                elif isinstance(peer, InputPeerChannel):
-                    peer_id = peer.channel_id
-                    chat_type = "channel"
-                    chat = await client.get_chat(int(f"-100{peer_id}"))
-                elif isinstance(peer, InputPeerChat):
-                    peer_id = peer.chat_id
-                    chat_type = "group"
-                    chat = await client.get_chat(-peer_id)
-                else:
-                    continue
+            if isinstance(peer, InputPeerUser):
+                folder_peer_ids.add(peer.user_id)
+                peer_types[peer.user_id] = "personal"
+            elif isinstance(peer, InputPeerChannel):
+                folder_peer_ids.add(peer.channel_id)
+                peer_types[peer.channel_id] = "channel"
+            elif isinstance(peer, InputPeerChat):
+                folder_peer_ids.add(peer.chat_id)
+                peer_types[peer.chat_id] = "group"
 
-                name = getattr(chat, 'title', None)
-                if not name:
-                    first = getattr(chat, 'first_name', '') or ''
-                    last = getattr(chat, 'last_name', '') or ''
-                    name = f"{first} {last}".strip()
+        # Get all dialogs and filter by folder peers
+        chats = []
+        async for dialog in client.get_dialogs():
+            chat = dialog.chat
+            raw_id = abs(chat.id)
+            # Match by stripping -100 prefix for channels
+            match_id = raw_id
+            if str(chat.id).startswith("-100"):
+                match_id = int(str(raw_id)[3:]) if len(str(raw_id)) > 3 else raw_id
 
+            if match_id in folder_peer_ids or raw_id in folder_peer_ids:
+                chat_type = peer_types.get(match_id) or peer_types.get(raw_id, "personal")
                 actual_type = str(getattr(chat, 'type', ''))
                 if 'BOT' in actual_type:
                     chat_type = 'bot'
@@ -83,15 +82,22 @@ async def get_folder_chats(account_number: int, folder_id: int, limit: int = 50)
                 elif 'CHANNEL' in actual_type:
                     chat_type = 'channel'
 
+                name = getattr(chat, 'title', None)
+                if not name:
+                    first = getattr(chat, 'first_name', '') or ''
+                    last = getattr(chat, 'last_name', '') or ''
+                    name = f"{first} {last}".strip()
+
                 chats.append({
                     "chat_id": chat.id,
                     "name": name or "Unknown",
                     "username": getattr(chat, 'username', None),
                     "type": chat_type,
                 })
-            except Exception:
-                continue
-        
+
+            if len(chats) >= len(folder_peer_ids):
+                break
+
         return {"folder_id": folder_id, "chats": chats, "total": len(chats)}
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
