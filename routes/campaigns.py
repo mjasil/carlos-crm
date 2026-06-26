@@ -1,5 +1,4 @@
 from fastapi import APIRouter, HTTPException, BackgroundTasks, UploadFile, File, Form
-from fastapi import Request
 from database import supabase
 from telegram_client import get_client
 from typing import Optional
@@ -7,7 +6,12 @@ import asyncio, datetime, os, tempfile
 
 router = APIRouter()
 
+# Global state for pause/cancel
+campaign_controls = {}
+
 async def send_bulk(campaign_id, client, chat_ids, message, delay, file_path=None, file_type=None, parse_mode="markdown"):
+    campaign_controls[campaign_id] = {"paused": False, "cancelled": False}
+    
     supabase.table("campaigns").update({
         "status": "running",
         "started_at": datetime.datetime.utcnow().isoformat()
@@ -17,6 +21,21 @@ async def send_bulk(campaign_id, client, chat_ids, message, delay, file_path=Non
     failed = 0
     
     for chat_id in chat_ids:
+        # Check cancelled
+        ctrl = campaign_controls.get(campaign_id, {})
+        if ctrl.get("cancelled"):
+            break
+        
+        # Check paused - wait until unpaused
+        while campaign_controls.get(campaign_id, {}).get("paused"):
+            await asyncio.sleep(1)
+            ctrl = campaign_controls.get(campaign_id, {})
+            if ctrl.get("cancelled"):
+                break
+        
+        if campaign_controls.get(campaign_id, {}).get("cancelled"):
+            break
+
         try:
             if file_path and os.path.exists(file_path):
                 if file_type == "photo":
@@ -54,10 +73,14 @@ async def send_bulk(campaign_id, client, chat_ids, message, delay, file_path=Non
         try: os.remove(file_path)
         except: pass
     
+    ctrl = campaign_controls.get(campaign_id, {})
+    final_status = "cancelled" if ctrl.get("cancelled") else "completed"
     supabase.table("campaigns").update({
-        "status": "completed",
+        "status": final_status,
         "completed_at": datetime.datetime.utcnow().isoformat()
     }).eq("id", campaign_id).execute()
+    
+    campaign_controls.pop(campaign_id, None)
 
 @router.post("/send")
 async def send_campaign(
@@ -110,6 +133,29 @@ async def send_campaign(
     
     return {"campaign_id": campaign_id, "status": "started", "total": len(ids)}
 
+@router.post("/{campaign_id}/pause")
+def pause_campaign(campaign_id: str):
+    if campaign_id in campaign_controls:
+        campaign_controls[campaign_id]["paused"] = True
+        supabase.table("campaigns").update({"status": "paused"}).eq("id", campaign_id).execute()
+        return {"status": "paused"}
+    raise HTTPException(status_code=404, detail="Campaign not running")
+
+@router.post("/{campaign_id}/resume")
+def resume_campaign(campaign_id: str):
+    if campaign_id in campaign_controls:
+        campaign_controls[campaign_id]["paused"] = False
+        supabase.table("campaigns").update({"status": "running"}).eq("id", campaign_id).execute()
+        return {"status": "resumed"}
+    raise HTTPException(status_code=404, detail="Campaign not found")
+
+@router.post("/{campaign_id}/cancel")
+def cancel_campaign(campaign_id: str):
+    if campaign_id in campaign_controls:
+        campaign_controls[campaign_id]["cancelled"] = True
+        return {"status": "cancelling"}
+    raise HTTPException(status_code=404, detail="Campaign not running")
+
 @router.get("/")
 def get_campaigns():
     result = supabase.table("campaigns").select("*").order("created_at", desc=True).execute()
@@ -122,9 +168,10 @@ def get_progress(campaign_id: str):
         raise HTTPException(status_code=404, detail="Campaign not found")
     c = result.data[0]
     total = c["total_chats"] or 1
+    is_paused = campaign_controls.get(campaign_id, {}).get("paused", False)
     return {
         "campaign_id": campaign_id,
-        "status": c["status"],
+        "status": "paused" if is_paused else c["status"],
         "total": c["total_chats"],
         "sent": c["sent_count"],
         "failed": c["failed_count"],
