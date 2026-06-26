@@ -1,12 +1,10 @@
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 from database import supabase
-from passlib.context import CryptContext
 from jose import jwt
-import os, datetime
+import os, datetime, bcrypt
 
 router = APIRouter()
-pwd_context = CryptContext(schemes=["bcrypt"])
 SECRET = os.getenv("SECRET_KEY", "secret")
 
 class LoginRequest(BaseModel):
@@ -21,7 +19,7 @@ class RegisterRequest(BaseModel):
 
 @router.post("/register")
 def register(req: RegisterRequest):
-    hashed = pwd_context.hash(req.password)
+    hashed = bcrypt.hashpw(req.password.encode(), bcrypt.gensalt()).decode()
     result = supabase.table("team_members").insert({
         "name": req.name,
         "email": req.email,
@@ -36,7 +34,11 @@ def login(req: LoginRequest):
     if not result.data:
         raise HTTPException(status_code=401, detail="Invalid credentials")
     user = result.data[0]
-    if not pwd_context.verify(req.password, user["password_hash"]):
+    try:
+        valid = bcrypt.checkpw(req.password.encode(), user["password_hash"].encode())
+    except Exception:
+        valid = False
+    if not valid:
         raise HTTPException(status_code=401, detail="Invalid credentials")
     token = jwt.encode({
         "sub": user["id"],
