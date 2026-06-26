@@ -32,25 +32,13 @@ async def send_bulk(campaign_id, client, chat_ids, message, delay, file_path=Non
         try:
             if file_path and os.path.exists(file_path):
                 if file_type == "photo":
-                    if message:
-                        await client.send_photo(chat_id, file_path, caption=message)
-                    else:
-                        await client.send_photo(chat_id, file_path)
+                    await client.send_photo(chat_id, file_path, caption=message or None)
                 elif file_type == "audio":
-                    if message:
-                        await client.send_audio(chat_id, file_path, caption=message)
-                    else:
-                        await client.send_audio(chat_id, file_path)
+                    await client.send_audio(chat_id, file_path, caption=message or None)
                 elif file_type == "video":
-                    if message:
-                        await client.send_video(chat_id, file_path, caption=message)
-                    else:
-                        await client.send_video(chat_id, file_path)
+                    await client.send_video(chat_id, file_path, caption=message or None)
                 else:
-                    if message:
-                        await client.send_document(chat_id, file_path, caption=message)
-                    else:
-                        await client.send_document(chat_id, file_path)
+                    await client.send_document(chat_id, file_path, caption=message or None)
             else:
                 await client.send_message(chat_id, message)
             sent += 1
@@ -96,6 +84,7 @@ async def send_campaign(
     delay_seconds: int = Form(3),
     sent_by: str = Form("admin"),
     parse_mode: str = Form("none"),
+    scheduled_at: str = Form(""),
     file: Optional[UploadFile] = File(None)
 ):
     ids = [int(x) for x in chat_ids.split(",") if x.strip()]
@@ -104,14 +93,10 @@ async def send_campaign(
     file_type = None
     if file and file.filename:
         ext = file.filename.split(".")[-1].lower()
-        if ext in ["jpg", "jpeg", "png", "gif", "webp"]:
-            file_type = "photo"
-        elif ext in ["mp3", "ogg", "wav", "m4a"]:
-            file_type = "audio"
-        elif ext in ["mp4", "mov", "avi"]:
-            file_type = "video"
-        else:
-            file_type = "document"
+        if ext in ["jpg","jpeg","png","gif","webp"]: file_type = "photo"
+        elif ext in ["mp3","ogg","wav","m4a"]: file_type = "audio"
+        elif ext in ["mp4","mov","avi"]: file_type = "video"
+        else: file_type = "document"
         tmp = tempfile.NamedTemporaryFile(delete=False, suffix=f".{ext}")
         tmp.write(await file.read())
         tmp.close()
@@ -122,15 +107,59 @@ async def send_campaign(
         "total_chats": len(ids),
         "sent_count": 0,
         "failed_count": 0,
-        "status": "pending",
-        "sent_by": sent_by
+        "status": "scheduled" if scheduled_at else "pending",
+        "sent_by": sent_by,
+        "scheduled_at": scheduled_at if scheduled_at else None
     }).execute()
     
     campaign_id = campaign.data[0]["id"]
     client = await get_client(account_number)
+
+    if scheduled_at:
+        # Schedule the campaign
+        try:
+            scheduled_time = datetime.datetime.fromisoformat(scheduled_at)
+            delay_secs = (scheduled_time - datetime.datetime.utcnow()).total_seconds()
+            if delay_secs > 0:
+                async def run_scheduled():
+                    await asyncio.sleep(delay_secs)
+                    await send_bulk(campaign_id, client, ids, message, delay_seconds, file_path, file_type)
+                background_tasks.add_task(run_scheduled)
+                return {"campaign_id": campaign_id, "status": "scheduled", "scheduled_at": scheduled_at, "total": len(ids)}
+        except:
+            pass
+
     background_tasks.add_task(send_bulk, campaign_id, client, ids, message, delay_seconds, file_path, file_type)
-    
     return {"campaign_id": campaign_id, "status": "started", "total": len(ids)}
+
+@router.post("/{campaign_id}/resend-failed")
+async def resend_failed(campaign_id: str, background_tasks: BackgroundTasks, account_number: int = Form(1), delay_seconds: int = Form(3)):
+    # Get failed logs
+    logs = supabase.table("campaign_logs").select("*").eq("campaign_id", campaign_id).eq("status", "failed").execute()
+    if not logs.data:
+        raise HTTPException(status_code=404, detail="No failed messages found")
+    
+    campaign = supabase.table("campaigns").select("*").eq("id", campaign_id).execute()
+    if not campaign.data:
+        raise HTTPException(status_code=404, detail="Campaign not found")
+    
+    c = campaign.data[0]
+    chat_ids = [log["chat_id"] for log in logs.data]
+    
+    new_campaign = supabase.table("campaigns").insert({
+        "message": c["message"],
+        "total_chats": len(chat_ids),
+        "sent_count": 0,
+        "failed_count": 0,
+        "status": "pending",
+        "sent_by": f"Resend of {campaign_id[:8]}"
+    }).execute()
+    
+    new_id = new_campaign.data[0]["id"]
+    client = await get_client(account_number)
+    background_tasks.add_task(send_bulk, new_id, client, chat_ids, c["message"], delay_seconds)
+    
+    return {"campaign_id": new_id, "status": "started", "total": len(chat_ids)}
 
 @router.post("/{campaign_id}/pause")
 def pause_campaign(campaign_id: str):
