@@ -1,22 +1,12 @@
-from fastapi import APIRouter, HTTPException, BackgroundTasks
-from pydantic import BaseModel
+from fastapi import APIRouter, HTTPException, BackgroundTasks, UploadFile, File, Form
 from database import supabase
 from telegram_client import get_client
 from typing import Optional, List
-import asyncio, datetime
+import asyncio, datetime, os, tempfile
 
 router = APIRouter()
 
-class CampaignRequest(BaseModel):
-    account_number: int
-    folder_id: int
-    message: str
-    chat_ids: List[int]
-    delay_seconds: int = 3
-    sent_by: str = "admin"
-    scheduled_at: Optional[str] = None
-
-async def send_bulk(campaign_id: str, client, chat_ids: list, message: str, delay: int):
+async def send_bulk(campaign_id: str, client, chat_ids: list, message: str, delay: int, file_path: str = None, file_type: str = None, parse_mode: str = "markdown"):
     supabase.table("campaigns").update({"status": "running", "started_at": datetime.datetime.utcnow().isoformat()}).eq("id", campaign_id).execute()
     
     sent = 0
@@ -24,7 +14,19 @@ async def send_bulk(campaign_id: str, client, chat_ids: list, message: str, dela
     
     for chat_id in chat_ids:
         try:
-            await client.send_message(chat_id, message)
+            if file_path and os.path.exists(file_path):
+                if file_type == "photo":
+                    await client.send_photo(chat_id, file_path, caption=message, parse_mode=parse_mode)
+                elif file_type == "audio":
+                    await client.send_audio(chat_id, file_path, caption=message)
+                elif file_type == "video":
+                    await client.send_video(chat_id, file_path, caption=message, parse_mode=parse_mode)
+                elif file_type == "document":
+                    await client.send_document(chat_id, file_path, caption=message)
+                else:
+                    await client.send_message(chat_id, message, parse_mode=parse_mode)
+            else:
+                await client.send_message(chat_id, message, parse_mode=parse_mode)
             sent += 1
             supabase.table("campaign_logs").insert({
                 "campaign_id": campaign_id,
@@ -43,27 +45,65 @@ async def send_bulk(campaign_id: str, client, chat_ids: list, message: str, dela
         supabase.table("campaigns").update({"sent_count": sent, "failed_count": failed}).eq("id", campaign_id).execute()
         await asyncio.sleep(delay)
     
+    # Cleanup temp file
+    if file_path and os.path.exists(file_path):
+        try:
+            os.remove(file_path)
+        except:
+            pass
+    
     supabase.table("campaigns").update({
         "status": "completed",
         "completed_at": datetime.datetime.utcnow().isoformat()
     }).eq("id", campaign_id).execute()
 
 @router.post("/send")
-async def send_campaign(req: CampaignRequest, background_tasks: BackgroundTasks):
+async def send_campaign(
+    background_tasks: BackgroundTasks,
+    account_number: int = Form(...),
+    folder_id: int = Form(...),
+    message: str = Form(""),
+    chat_ids: str = Form(...),
+    delay_seconds: int = Form(3),
+    sent_by: str = Form("admin"),
+    parse_mode: str = Form("markdown"),
+    file: Optional[UploadFile] = File(None)
+):
+    ids = [int(x) for x in chat_ids.split(",") if x.strip()]
+    
+    # Handle file upload
+    file_path = None
+    file_type = None
+    if file and file.filename:
+        ext = file.filename.split(".")[-1].lower()
+        if ext in ["jpg", "jpeg", "png", "gif", "webp"]:
+            file_type = "photo"
+        elif ext in ["mp3", "ogg", "wav", "m4a"]:
+            file_type = "audio"
+        elif ext in ["mp4", "mov", "avi"]:
+            file_type = "video"
+        else:
+            file_type = "document"
+        
+        tmp = tempfile.NamedTemporaryFile(delete=False, suffix=f".{ext}")
+        tmp.write(await file.read())
+        tmp.close()
+        file_path = tmp.name
+
     campaign = supabase.table("campaigns").insert({
-        "message": req.message,
-        "total_chats": len(req.chat_ids),
+        "message": message,
+        "total_chats": len(ids),
         "sent_count": 0,
         "failed_count": 0,
         "status": "pending",
-        "sent_by": req.sent_by
+        "sent_by": sent_by
     }).execute()
     
     campaign_id = campaign.data[0]["id"]
-    client = await get_client(req.account_number)
-    background_tasks.add_task(send_bulk, campaign_id, client, req.chat_ids, req.message, req.delay_seconds)
+    client = await get_client(account_number)
+    background_tasks.add_task(send_bulk, campaign_id, client, ids, message, delay_seconds, file_path, file_type, parse_mode)
     
-    return {"campaign_id": campaign_id, "status": "started", "total": len(req.chat_ids)}
+    return {"campaign_id": campaign_id, "status": "started", "total": len(ids)}
 
 @router.get("/")
 def get_campaigns():
