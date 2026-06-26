@@ -1,7 +1,7 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from dotenv import load_dotenv
-import os, asyncio, httpx
+import os, asyncio, httpx, traceback
 
 load_dotenv()
 
@@ -31,6 +31,29 @@ def root():
 @app.get("/health")
 def health():
     return {"status": "ok"}
+
+@app.get("/debug/{account_number}")
+async def debug(account_number: int):
+    import os
+    session = os.getenv(f"ACCOUNT{account_number}_SESSION")
+    api_id = os.getenv(f"ACCOUNT{account_number}_API_ID")
+    api_hash = os.getenv(f"ACCOUNT{account_number}_API_HASH")
+    return {
+        "api_id": api_id,
+        "api_hash_exists": bool(api_hash),
+        "session_length": len(session) if session else 0,
+        "session_start": session[:20] if session else None
+    }
+
+@app.get("/test-connect/{account_number}")
+async def test_connect(account_number: int):
+    try:
+        from telegram_client import get_client
+        client = await get_client(account_number)
+        me = await client.get_me()
+        return {"success": True, "name": me.first_name, "phone": str(me.phone_number)}
+    except Exception as e:
+        return {"success": False, "error": str(e), "traceback": traceback.format_exc()}
 
 async def self_ping():
     await asyncio.sleep(60)
