@@ -1,7 +1,7 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from dotenv import load_dotenv
-import os
+import os, asyncio, httpx
 
 load_dotenv()
 
@@ -31,3 +31,17 @@ def root():
 @app.get("/health")
 def health():
     return {"status": "ok"}
+
+async def self_ping():
+    await asyncio.sleep(60)
+    while True:
+        try:
+            async with httpx.AsyncClient() as client:
+                await client.get("https://carlos-crm.onrender.com/health", timeout=10)
+        except:
+            pass
+        await asyncio.sleep(240)
+
+@app.on_event("startup")
+async def startup():
+    asyncio.create_task(self_ping())
