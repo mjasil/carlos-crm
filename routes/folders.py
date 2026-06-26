@@ -48,55 +48,58 @@ async def get_folder_chats(account_number: int, folder_id: int):
         pinned = list(getattr(target, 'pinned_peers', []) or [])
         all_peers = peers + pinned
 
-        # Build a set of peer IDs from folder
-        folder_peer_ids = set()
-        peer_types = {}
-        for peer in all_peers:
-            if isinstance(peer, InputPeerUser):
-                folder_peer_ids.add(peer.user_id)
-                peer_types[peer.user_id] = "personal"
-            elif isinstance(peer, InputPeerChannel):
-                folder_peer_ids.add(peer.channel_id)
-                peer_types[peer.channel_id] = "channel"
-            elif isinstance(peer, InputPeerChat):
-                folder_peer_ids.add(peer.chat_id)
-                peer_types[peer.chat_id] = "group"
-
-        # Get all dialogs and filter by folder peers
+        # Fast method: read directly from peer objects without get_chat
         chats = []
-        async for dialog in client.get_dialogs():
-            chat = dialog.chat
-            raw_id = abs(chat.id)
-            # Match by stripping -100 prefix for channels
-            match_id = raw_id
-            if str(chat.id).startswith("-100"):
-                match_id = int(str(raw_id)[3:]) if len(str(raw_id)) > 3 else raw_id
+        for peer in all_peers:
+            try:
+                if isinstance(peer, InputPeerUser):
+                    chats.append({
+                        "chat_id": peer.user_id,
+                        "name": f"User {peer.user_id}",
+                        "username": None,
+                        "type": "personal",
+                        "access_hash": peer.access_hash
+                    })
+                elif isinstance(peer, InputPeerChannel):
+                    chats.append({
+                        "chat_id": int(f"-100{peer.channel_id}"),
+                        "name": f"Channel {peer.channel_id}",
+                        "username": None,
+                        "type": "channel",
+                        "access_hash": peer.access_hash
+                    })
+                elif isinstance(peer, InputPeerChat):
+                    chats.append({
+                        "chat_id": -peer.chat_id,
+                        "name": f"Group {peer.chat_id}",
+                        "username": None,
+                        "type": "group",
+                        "access_hash": 0
+                    })
+            except Exception:
+                continue
 
-            if match_id in folder_peer_ids or raw_id in folder_peer_ids:
-                chat_type = peer_types.get(match_id) or peer_types.get(raw_id, "personal")
-                actual_type = str(getattr(chat, 'type', ''))
-                if 'BOT' in actual_type:
-                    chat_type = 'bot'
-                elif 'SUPERGROUP' in actual_type or 'GROUP' in actual_type:
-                    chat_type = 'group'
-                elif 'CHANNEL' in actual_type:
-                    chat_type = 'channel'
-
-                name = getattr(chat, 'title', None)
-                if not name:
-                    first = getattr(chat, 'first_name', '') or ''
-                    last = getattr(chat, 'last_name', '') or ''
-                    name = f"{first} {last}".strip()
-
-                chats.append({
-                    "chat_id": chat.id,
-                    "name": name or "Unknown",
-                    "username": getattr(chat, 'username', None),
-                    "type": chat_type,
-                })
-
-            if len(chats) >= len(folder_peer_ids):
-                break
+        # Try to get names from dialogs cache (fast, no API calls)
+        try:
+            chat_ids_set = {abs(c["chat_id"]) for c in chats}
+            dialog_names = {}
+            async for dialog in client.get_dialogs(limit=500):
+                chat = dialog.chat
+                raw_id = abs(chat.id)
+                if raw_id in chat_ids_set or chat.id in {c["chat_id"] for c in chats}:
+                    name = getattr(chat, 'title', None)
+                    if not name:
+                        first = getattr(chat, 'first_name', '') or ''
+                        last = getattr(chat, 'last_name', '') or ''
+                        name = f"{first} {last}".strip()
+                    dialog_names[chat.id] = name or getattr(chat, 'username', None) or str(chat.id)
+            
+            # Update names
+            for c in chats:
+                if c["chat_id"] in dialog_names:
+                    c["name"] = dialog_names[c["chat_id"]]
+        except Exception:
+            pass
 
         return {"folder_id": folder_id, "chats": chats, "total": len(chats)}
     except Exception as e:
