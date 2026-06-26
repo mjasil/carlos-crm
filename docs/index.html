@@ -234,7 +234,7 @@ let state = { account: 1, folders: [], chats: [], filter: 'all', campaignId: nul
 
 const api = async (method, path, data) => {
   const token = localStorage.getItem('carlos_token')
-  const res = await axios({ method, url: API + path, data, headers: token ? { Authorization: `Bearer ${token}` } : {} })
+  const res = await axios({ method, url: API + path, data, timeout: 60000, headers: token ? { Authorization: `Bearer ${token}` } : {} })
   return res.data
 }
 
@@ -253,6 +253,7 @@ async function login() {
   const password = document.getElementById('loginPassword').value
   if (!email || !password) return toast('Fill all fields', 'error')
   try {
+    toast('Connecting... (may take 30s if server sleeping)')
     const res = await api('post', '/api/auth/login', { email, password })
     localStorage.setItem('carlos_token', res.token)
     localStorage.setItem('carlos_user', JSON.stringify(res.user))
