@@ -230,7 +230,7 @@
 
 <script>
 const API = 'https://carlos-crm.onrender.com'
-let state = { account: 1, folders: [], chats: [], filter: 'all', campaignId: null, contacts: [], progressInterval: null }
+let state = { account: 1, folders: [], chats: [], filter: 'all', campaignId: null, contacts: [], progressInterval: null, accountNames: {} }
 
 const api = async (method, path, data) => {
   const res = await axios({ method, url: API + path, data, timeout: 60000 })
@@ -300,12 +300,20 @@ function showPage(name) {
 
 function setAccount(n) {
   state.account = n
-  document.getElementById('acc1btn').className = `btn ${n===1?'btn-primary':'btn-secondary'}` + ' ' + 'flex:1;padding:8px;font-size:13px'
-  document.getElementById('acc2btn').className = `btn ${n===2?'btn-primary':'btn-secondary'}` + ' ' + 'flex:1;padding:8px;font-size:13px'
-  document.getElementById('acc1btn').style.cssText = 'flex:1;padding:8px;font-size:13px;' + (n===1?'background:#2563eb;color:white':'background:#334155;color:#f1f5f9')
-  document.getElementById('acc2btn').style.cssText = 'flex:1;padding:8px;font-size:13px;' + (n===2?'background:#2563eb;color:white':'background:#334155;color:#f1f5f9')
+  document.getElementById('acc1btn').style.cssText = 'flex:1;padding:8px;font-size:13px;border:none;cursor:pointer;border-radius:8px;' + (n===1?'background:#2563eb;color:white':'background:#334155;color:#f1f5f9')
+  document.getElementById('acc2btn').style.cssText = 'flex:1;padding:8px;font-size:13px;border:none;cursor:pointer;border-radius:8px;' + (n===2?'background:#2563eb;color:white':'background:#334155;color:#f1f5f9')
   document.getElementById('dashAccountLabel').textContent = `Account ${n} active`
   state.folders = []; state.chats = []
+  // Restore connect button for this account
+  const btn = document.getElementById('connectBtn')
+  const savedName = state.accountNames[n]
+  if (savedName) {
+    btn.textContent = `✅ ${savedName}`
+    btn.style.background = '#166534'
+  } else {
+    btn.textContent = `Connect Account ${n}`
+    btn.style.background = '#2563eb'
+  }
 }
 
 async function connectAccount() {
@@ -315,9 +323,12 @@ async function connectAccount() {
   try {
     const res = await api('get', `/test-connect/${accountNum}`)
     if (res.success) {
-      btn.textContent = `✅ ${res.name}`
+      state.accountNames[accountNum] = res.name
+      const displayName = res.name
+      btn.textContent = `✅ ${displayName}`
       btn.style.background = '#166534'
-      toast(`Connected: ${res.name}`)
+      btn.style.color = 'white'
+      toast(`Account ${accountNum} Connected: ${displayName}`)
       loadDashboard()
       loadFolders()
     } else {
