@@ -6,10 +6,8 @@ router = APIRouter()
 
 async def fetch_filters(client):
     result = await client.invoke(GetDialogFilters())
-    # result is a list directly
     if isinstance(result, list):
         return result
-    # or it has .filters
     return getattr(result, 'filters', result)
 
 @router.get("/{account_number}")
@@ -17,15 +15,29 @@ async def get_folders(account_number: int):
     try:
         client = await get_client(account_number)
         filters = await fetch_filters(client)
-        
         folders = []
         for f in filters:
             if hasattr(f, 'title'):
-                folders.append({
-                    "id": f.id,
-                    "title": f.title,
-                })
+                folders.append({"id": f.id, "title": f.title})
         return folders
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+@router.get("/{account_number}/{folder_id}/debug")
+async def debug_folder(account_number: int, folder_id: int):
+    try:
+        client = await get_client(account_number)
+        filters = await fetch_filters(client)
+        for f in filters:
+            if hasattr(f, 'id') and f.id == folder_id:
+                return {
+                    "id": f.id,
+                    "title": getattr(f, 'title', None),
+                    "attrs": [a for a in dir(f) if not a.startswith('_')],
+                    "include_peers": str(getattr(f, 'include_peers', 'NOT FOUND')),
+                    "pinned_peers": str(getattr(f, 'pinned_peers', 'NOT FOUND')),
+                }
+        return {"error": "folder not found"}
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
 
@@ -44,9 +56,14 @@ async def get_folder_chats(account_number: int, folder_id: int):
         if not target:
             raise HTTPException(status_code=404, detail="Folder not found")
         
-        chats = []
-        peers = getattr(target, 'include_peers', []) or getattr(target, 'included_peers', [])
+        # Try all possible peer attributes
+        peers = []
+        for attr in ['include_peers', 'included_peers', 'peers', 'pinned_peers']:
+            p = getattr(target, attr, None)
+            if p:
+                peers.extend(p)
         
+        chats = []
         for peer in peers:
             try:
                 resolved = await client.resolve_peer(peer)
