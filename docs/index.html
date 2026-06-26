@@ -139,27 +139,48 @@
               <h2 class="font-semibold text-white">Select Folder</h2>
               <button onclick="loadFolders()" style="background:none;border:none;color:#94a3b8;cursor:pointer;font-size:18px">↻</button>
             </div>
-            <div id="folderList"><p class="text-slate-400 text-sm">Click ↻ to load folders</p></div>
+            <div id="folderList"><p style="color:#94a3b8;font-size:13px">Loading folders...</p></div>
           </div>
           <div class="card" id="chatFilterCard" style="display:none">
-            <h2 class="font-semibold text-white mb-3">Filter Chats</h2>
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+              <h2 class="font-semibold text-white">Filter Chats</h2>
+              <label style="display:flex;align-items:center;gap:6px;font-size:13px;color:#94a3b8;cursor:pointer">
+                <input type="checkbox" id="selectAllChk" onchange="toggleSelectAll()" style="width:16px;height:16px">
+                Select All
+              </label>
+            </div>
             <div style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:12px" id="filterTags"></div>
-            <p class="text-slate-400 text-sm"><span id="chatCount">0</span> chats selected</p>
-            <div id="chatList" style="max-height:150px;overflow-y:auto;margin-top:8px;display:flex;flex-direction:column;gap:4px"></div>
+            <p style="color:#94a3b8;font-size:13px;margin-bottom:8px"><span id="chatCount">0</span> chats selected</p>
+            <div id="chatList" style="max-height:200px;overflow-y:auto;display:flex;flex-direction:column;gap:4px"></div>
           </div>
         </div>
         <div>
           <div class="card mb-4">
             <h2 class="font-semibold text-white mb-3">Compose Message</h2>
             <div style="margin-bottom:12px">
-              <label class="text-slate-400 text-xs mb-1 block">Load Template</label>
+              <label style="color:#94a3b8;font-size:12px;display:block;margin-bottom:4px">Load Template</label>
               <select class="input" id="templateSelect" onchange="loadTemplate()" style="font-size:13px">
                 <option value="">Select template...</option>
               </select>
             </div>
-            <textarea class="input" id="messageText" placeholder="Type your message..." style="min-height:140px;resize:none"></textarea>
+            <!-- Formatting toolbar -->
+            <div style="display:flex;gap:6px;margin-bottom:8px;flex-wrap:wrap">
+              <button onclick="insertFormat('**','**')" style="background:#334155;border:none;color:white;padding:4px 10px;border-radius:6px;cursor:pointer;font-weight:bold;font-size:13px">B</button>
+              <button onclick="insertFormat('_','_')" style="background:#334155;border:none;color:#94a3b8;padding:4px 10px;border-radius:6px;cursor:pointer;font-style:italic;font-size:13px">I</button>
+              <button onclick="insertFormat('`','`')" style="background:#334155;border:none;color:#60a5fa;padding:4px 10px;border-radius:6px;cursor:pointer;font-size:13px">Code</button>
+              <button onclick="insertFormat('~~','~~')" style="background:#334155;border:none;color:#94a3b8;padding:4px 10px;border-radius:6px;cursor:pointer;font-size:13px;text-decoration:line-through">S</button>
+              <button onclick="insertFormat('||','||')" style="background:#334155;border:none;color:#94a3b8;padding:4px 10px;border-radius:6px;cursor:pointer;font-size:13px">Spoiler</button>
+            </div>
+            <textarea class="input" id="messageText" placeholder="Type your message...&#10;&#10;**bold** _italic_ \`code\`" style="min-height:120px;resize:none"></textarea>
+            <!-- File upload -->
             <div style="margin-top:12px">
-              <label class="text-slate-400 text-xs mb-1 block">Delay between messages (seconds)</label>
+              <label style="color:#94a3b8;font-size:12px;display:block;margin-bottom:4px">Attach File (optional)</label>
+              <input type="file" id="fileInput" accept="image/*,audio/*,video/*,.pdf,.doc,.docx,.zip"
+                style="background:#0f172a;border:1px solid #334155;border-radius:8px;padding:8px;color:#94a3b8;width:100%;font-size:12px;box-sizing:border-box">
+              <p id="fileInfo" style="color:#60a5fa;font-size:11px;margin-top:4px"></p>
+            </div>
+            <div style="margin-top:12px">
+              <label style="color:#94a3b8;font-size:12px;display:block;margin-bottom:4px">Delay between messages (seconds)</label>
               <input class="input" type="number" id="delayInput" value="3" min="1" max="30">
             </div>
           </div>
@@ -168,10 +189,10 @@
             <div class="progress-bar mb-2"><div class="progress-fill" id="progressFill" style="width:0%"></div></div>
             <div style="display:flex;justify-content:space-between;font-size:13px">
               <span style="color:#4ade80">✅ <span id="progressSent">0</span> sent</span>
-              <span class="text-slate-400"><span id="progressPct">0</span>%</span>
+              <span style="color:#94a3b8"><span id="progressPct">0</span>%</span>
               <span style="color:#f87171">❌ <span id="progressFailed">0</span> failed</span>
             </div>
-            <p class="text-center text-slate-400 text-xs mt-2" id="progressStatus"></p>
+            <p style="text-align:center;color:#94a3b8;font-size:12px;margin-top:8px" id="progressStatus"></p>
           </div>
           <button class="btn btn-primary" onclick="sendMessage()" id="sendBtn">📨 Send Message</button>
         </div>
@@ -396,12 +417,47 @@ function renderChats() {
     <span class="tag ${state.filter===t?'tag-active':'tag-inactive'}" onclick="setFilter('${t}')">${t}</span>`).join('')
   const filtered = state.filter === 'all' ? state.chats : state.chats.filter(c => c.type === state.filter)
   document.getElementById('chatCount').textContent = filtered.length
-  document.getElementById('chatList').innerHTML = filtered.slice(0,30).map(c => `
-    <div style="font-size:12px;color:#cbd5e1;padding:4px 8px;background:#0f172a;border-radius:6px">${c.name} <span style="color:#64748b">• ${c.type}</span></div>`).join('')
-  if (filtered.length > 30) document.getElementById('chatList').innerHTML += `<p style="color:#64748b;font-size:12px;padding:4px 8px">+${filtered.length-30} more</p>`
+  document.getElementById('chatList').innerHTML = filtered.map((c,i) => `
+    <div style="display:flex;align-items:center;gap:8px;font-size:12px;color:#cbd5e1;padding:4px 8px;background:#0f172a;border-radius:6px">
+      <input type="checkbox" class="chat-chk" data-id="${c.chat_id}" data-idx="${i}" checked onchange="updateSelectedCount()" style="width:14px;height:14px;flex-shrink:0">
+      <span style="flex:1">${c.name} <span style="color:#64748b">• ${c.type}</span></span>
+      <button onclick="removeChat(${i})" style="background:none;border:none;color:#f87171;cursor:pointer;font-size:14px;padding:0">✕</button>
+    </div>`).join('')
+  updateSelectedCount()
+}
+
+function removeChat(idx) {
+  const filtered = state.filter === 'all' ? state.chats : state.chats.filter(c => c.type === state.filter)
+  const chat = filtered[idx]
+  state.chats = state.chats.filter(c => c.chat_id !== chat.chat_id)
+  renderChats()
 }
 
 function setFilter(f) { state.filter = f; renderChats() }
+
+function toggleSelectAll() {
+  const chk = document.getElementById('selectAllChk')
+  const checkboxes = document.querySelectorAll('.chat-chk')
+  checkboxes.forEach(c => c.checked = chk.checked)
+  updateSelectedCount()
+}
+
+function updateSelectedCount() {
+  const checked = document.querySelectorAll('.chat-chk:checked')
+  document.getElementById('chatCount').textContent = checked.length
+}
+
+function insertFormat(before, after) {
+  const ta = document.getElementById('messageText')
+  const start = ta.selectionStart
+  const end = ta.selectionEnd
+  const selected = ta.value.substring(start, end)
+  const replacement = before + (selected || 'text') + after
+  ta.value = ta.value.substring(0, start) + replacement + ta.value.substring(end)
+  ta.focus()
+  ta.selectionStart = start + before.length
+  ta.selectionEnd = start + before.length + (selected || 'text').length
+}
 
 async function loadTemplatesDropdown() {
   try {
@@ -420,25 +476,42 @@ function loadTemplate() {
 async function sendMessage() {
   const message = document.getElementById('messageText').value
   const delay = parseInt(document.getElementById('delayInput').value) || 3
-  if (!message) return toast('Write a message first', 'error')
   if (!state.selectedFolder) return toast('Select a folder first', 'error')
-  const filtered = state.filter === 'all' ? state.chats : state.chats.filter(c => c.type === state.filter)
-  if (!filtered.length) return toast('No chats found', 'error')
+  
+  // Get selected chats from checkboxes
+  const checked = document.querySelectorAll('.chat-chk:checked')
+  const selectedIds = Array.from(checked).map(c => c.dataset.id)
+  
+  if (!selectedIds.length) return toast('No chats selected', 'error')
+  if (!message && !document.getElementById('fileInput').files[0]) return toast('Write a message or attach a file', 'error')
+  
   const user = JSON.parse(localStorage.getItem('carlos_user') || '{}')
   document.getElementById('sendBtn').textContent = 'Sending...'
   document.getElementById('progressCard').style.display = 'block'
+  
   try {
-    const res = await api('post', '/api/campaigns/send', {
-      account_number: state.account,
-      folder_id: state.selectedFolder.id,
-      message, delay_seconds: delay,
-      chat_ids: filtered.map(c => c.chat_id),
-      sent_by: user.name || 'admin'
-    })
-    state.campaignId = res.campaign_id
-    toast(`Sending to ${filtered.length} chats...`)
+    const formData = new FormData()
+    formData.append('account_number', state.account)
+    formData.append('folder_id', state.selectedFolder.id)
+    formData.append('message', message)
+    formData.append('chat_ids', selectedIds.join(','))
+    formData.append('delay_seconds', delay)
+    formData.append('sent_by', user.name || 'admin')
+    formData.append('parse_mode', 'markdown')
+    
+    const fileInput = document.getElementById('fileInput')
+    if (fileInput.files[0]) {
+      formData.append('file', fileInput.files[0])
+    }
+    
+    const res = await axios.post(API + '/api/campaigns/send', formData, { timeout: 60000 })
+    state.campaignId = res.data.campaign_id
+    toast(`Sending to ${selectedIds.length} chats...`)
     state.progressInterval = setInterval(checkProgress, 2000)
-  } catch { toast('Failed to start campaign', 'error'); document.getElementById('sendBtn').textContent = '📨 Send Message' }
+  } catch(e) { 
+    toast('Failed to start campaign', 'error')
+    document.getElementById('sendBtn').textContent = '📨 Send Message'
+  }
 }
 
 async function checkProgress() {
@@ -563,6 +636,16 @@ async function addTeamMember() {
     document.getElementById('teamPassword').value = ''
   } catch (e) { toast(e.response?.data?.detail || 'Failed', 'error') }
 }
+
+// File input handler
+document.addEventListener('DOMContentLoaded', () => {
+  const fi = document.getElementById('fileInput')
+  if (fi) fi.addEventListener('change', () => {
+    const f = fi.files[0]
+    if (f) document.getElementById('fileInfo').textContent = `📎 ${f.name} (${(f.size/1024).toFixed(1)}KB)`
+    else document.getElementById('fileInfo').textContent = ''
+  })
+})
 
 // Init - No login required
 window.onload = () => {
