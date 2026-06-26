@@ -261,7 +261,7 @@ const API = 'https://carlos-crm.onrender.com'
 let state = { account: 1, folders: [], chats: [], filter: 'all', campaignId: null, contacts: [], progressInterval: null, accountNames: {} }
 
 const api = async (method, path, data) => {
-  const res = await axios({ method, url: API + path, data, timeout: 60000 })
+  const res = await axios({ method, url: API + path, data, timeout: 120000 })
   return res.data
 }
 
@@ -408,14 +408,19 @@ async function selectFolder(id, title) {
   document.getElementById('folder-'+id).style.background = '#2563eb'
   state.selectedFolder = { id, title }
   document.getElementById('chatFilterCard').style.display = 'block'
-  document.getElementById('chatList').innerHTML = '<p class="text-slate-400 text-sm">Loading chats...</p>'
+  document.getElementById('chatList').innerHTML = '<p style="color:#94a3b8;font-size:13px">Loading chats... (may take 30s for large folders)</p>'
+  document.getElementById('chatCount').textContent = '...'
   try {
     const res = await api('get', `/api/folders/${state.account}/${id}/chats`)
     state.chats = res.chats
     state.filter = 'all'
     renderChats()
     loadTemplatesDropdown()
-  } catch { toast('Failed to load chats', 'error') }
+    toast(`Loaded ${res.total} chats!`)
+  } catch(e) { 
+    toast('Loading timed out - try again', 'error')
+    document.getElementById('chatList').innerHTML = '<p style="color:#f87171;font-size:13px">Failed - click folder again to retry</p>'
+  }
 }
 
 function renderChats() {
