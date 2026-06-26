@@ -1,6 +1,7 @@
 from fastapi import APIRouter, HTTPException
 from telegram_client import get_client
 from pyrogram.raw.functions.messages import GetDialogFilters
+from pyrogram.raw.types import InputPeerUser, InputPeerChannel, InputPeerChat
 
 router = APIRouter()
 
@@ -18,26 +19,13 @@ async def get_folders(account_number: int):
         folders = []
         for f in filters:
             if hasattr(f, 'title'):
-                folders.append({"id": f.id, "title": f.title})
-        return folders
-    except Exception as e:
-        raise HTTPException(status_code=400, detail=str(e))
-
-@router.get("/{account_number}/{folder_id}/debug")
-async def debug_folder(account_number: int, folder_id: int):
-    try:
-        client = await get_client(account_number)
-        filters = await fetch_filters(client)
-        for f in filters:
-            if hasattr(f, 'id') and f.id == folder_id:
-                return {
+                peers = getattr(f, 'include_peers', []) or []
+                folders.append({
                     "id": f.id,
-                    "title": getattr(f, 'title', None),
-                    "attrs": [a for a in dir(f) if not a.startswith('_')],
-                    "include_peers": str(getattr(f, 'include_peers', 'NOT FOUND')),
-                    "pinned_peers": str(getattr(f, 'pinned_peers', 'NOT FOUND')),
-                }
-        return {"error": "folder not found"}
+                    "title": f.title,
+                    "chat_count": len(peers)
+                })
+        return folders
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
 
@@ -56,33 +44,43 @@ async def get_folder_chats(account_number: int, folder_id: int):
         if not target:
             raise HTTPException(status_code=404, detail="Folder not found")
         
-        # Try all possible peer attributes
-        peers = []
-        for attr in ['include_peers', 'included_peers', 'peers', 'pinned_peers']:
-            p = getattr(target, attr, None)
-            if p:
-                peers.extend(p)
+        peers = getattr(target, 'include_peers', []) or []
+        pinned = getattr(target, 'pinned_peers', []) or []
+        all_peers = list(peers) + list(pinned)
         
         chats = []
-        for peer in peers:
+        for peer in all_peers:
             try:
-                resolved = await client.resolve_peer(peer)
-                chat = await client.get_chat(resolved)
-                chat_type = "personal"
-                t = str(chat.type)
-                if "GROUP" in t or "SUPERGROUP" in t:
-                    chat_type = "group"
-                elif "CHANNEL" in t:
+                # Get ID and type directly from peer object
+                if isinstance(peer, InputPeerUser):
+                    peer_id = peer.user_id
+                    chat_type = "personal"
+                    chat = await client.get_chat(peer_id)
+                elif isinstance(peer, InputPeerChannel):
+                    peer_id = peer.channel_id
                     chat_type = "channel"
-                elif "BOT" in t:
-                    chat_type = "bot"
-                
+                    chat = await client.get_chat(int(f"-100{peer_id}"))
+                elif isinstance(peer, InputPeerChat):
+                    peer_id = peer.chat_id
+                    chat_type = "group"
+                    chat = await client.get_chat(-peer_id)
+                else:
+                    continue
+
                 name = getattr(chat, 'title', None)
                 if not name:
                     first = getattr(chat, 'first_name', '') or ''
                     last = getattr(chat, 'last_name', '') or ''
                     name = f"{first} {last}".strip()
-                
+
+                actual_type = str(getattr(chat, 'type', ''))
+                if 'BOT' in actual_type:
+                    chat_type = 'bot'
+                elif 'SUPERGROUP' in actual_type or 'GROUP' in actual_type:
+                    chat_type = 'group'
+                elif 'CHANNEL' in actual_type:
+                    chat_type = 'channel'
+
                 chats.append({
                     "chat_id": chat.id,
                     "name": name or "Unknown",
