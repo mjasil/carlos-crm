@@ -1,7 +1,7 @@
 from fastapi import APIRouter, HTTPException
 from database import supabase
 from telegram_client import get_client
-import os
+import os, traceback
 
 router = APIRouter()
 
@@ -13,6 +13,17 @@ def get_accounts():
 @router.post("/connect/{account_number}")
 async def connect_account(account_number: int):
     try:
+        # Check session string exists
+        session_string = os.getenv(f"ACCOUNT{account_number}_SESSION")
+        if not session_string:
+            raise HTTPException(status_code=400, detail=f"ACCOUNT{account_number}_SESSION not set in environment")
+        
+        api_id = os.getenv(f"ACCOUNT{account_number}_API_ID")
+        api_hash = os.getenv(f"ACCOUNT{account_number}_API_HASH")
+        
+        if not api_id or not api_hash:
+            raise HTTPException(status_code=400, detail=f"API credentials missing for account {account_number}")
+
         client = await get_client(account_number)
         me = await client.get_me()
         name = os.getenv(f"ACCOUNT{account_number}_NAME", f"Account {account_number}")
@@ -27,14 +38,17 @@ async def connect_account(account_number: int):
             supabase.table("accounts").insert({
                 "name": name,
                 "phone": str(me.phone_number),
-                "api_id": os.getenv(f"ACCOUNT{account_number}_API_ID"),
-                "api_hash": os.getenv(f"ACCOUNT{account_number}_API_HASH"),
+                "api_id": str(api_id),
+                "api_hash": str(api_hash),
                 "is_active": True
             }).execute()
         
         return {"status": "connected", "name": me.first_name, "phone": str(me.phone_number)}
+    except HTTPException:
+        raise
     except Exception as e:
-        raise HTTPException(status_code=400, detail=str(e))
+        error_detail = f"{str(e)} | {traceback.format_exc()}"
+        raise HTTPException(status_code=400, detail=error_detail)
 
 @router.post("/disconnect/{account_number}")
 async def disconnect_account(account_number: int):
