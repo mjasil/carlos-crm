@@ -233,8 +233,7 @@ const API = 'https://carlos-crm.onrender.com'
 let state = { account: 1, folders: [], chats: [], filter: 'all', campaignId: null, contacts: [], progressInterval: null }
 
 const api = async (method, path, data) => {
-  const token = localStorage.getItem('carlos_token')
-  const res = await axios({ method, url: API + path, data, timeout: 60000, headers: token ? { Authorization: `Bearer ${token}` } : {} })
+  const res = await axios({ method, url: API + path, data, timeout: 60000 })
   return res.data
 }
 
@@ -544,14 +543,12 @@ async function addTeamMember() {
   } catch (e) { toast(e.response?.data?.detail || 'Failed', 'error') }
 }
 
-// Init
+// Init - No login required
 window.onload = () => {
-  const token = localStorage.getItem('carlos_token')
-  const user = JSON.parse(localStorage.getItem('carlos_user') || 'null')
-  if (token && user) {
-    document.getElementById('loginPage').style.display = 'none'
-    showApp(user)
-  }
+  const user = { name: 'Admin', role: 'admin' }
+  localStorage.setItem('carlos_user', JSON.stringify(user))
+  document.getElementById('loginPage').style.display = 'none'
+  showApp(user)
   setAccount(1)
 }
 </script>
