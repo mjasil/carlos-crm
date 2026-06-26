@@ -5,11 +5,9 @@ from typing import Optional
 import asyncio, datetime, os, tempfile
 
 router = APIRouter()
-
-# Global state for pause/cancel
 campaign_controls = {}
 
-async def send_bulk(campaign_id, client, chat_ids, message, delay, file_path=None, file_type=None, parse_mode=None):
+async def send_bulk(campaign_id, client, chat_ids, message, delay, file_path=None, file_type=None):
     campaign_controls[campaign_id] = {"paused": False, "cancelled": False}
     
     supabase.table("campaigns").update({
@@ -21,31 +19,38 @@ async def send_bulk(campaign_id, client, chat_ids, message, delay, file_path=Non
     failed = 0
     
     for chat_id in chat_ids:
-        # Check cancelled
         ctrl = campaign_controls.get(campaign_id, {})
         if ctrl.get("cancelled"):
             break
-        
-        # Check paused - wait until unpaused
         while campaign_controls.get(campaign_id, {}).get("paused"):
             await asyncio.sleep(1)
-            ctrl = campaign_controls.get(campaign_id, {})
-            if ctrl.get("cancelled"):
+            if campaign_controls.get(campaign_id, {}).get("cancelled"):
                 break
-        
         if campaign_controls.get(campaign_id, {}).get("cancelled"):
             break
 
         try:
             if file_path and os.path.exists(file_path):
                 if file_type == "photo":
-                    await client.send_photo(chat_id, file_path, caption=message or None, parse_mode=parse_mode if message else None)
+                    if message:
+                        await client.send_photo(chat_id, file_path, caption=message)
+                    else:
+                        await client.send_photo(chat_id, file_path)
                 elif file_type == "audio":
-                    await client.send_audio(chat_id, file_path, caption=message or None)
+                    if message:
+                        await client.send_audio(chat_id, file_path, caption=message)
+                    else:
+                        await client.send_audio(chat_id, file_path)
                 elif file_type == "video":
-                    await client.send_video(chat_id, file_path, caption=message or None, parse_mode=parse_mode if message else None)
+                    if message:
+                        await client.send_video(chat_id, file_path, caption=message)
+                    else:
+                        await client.send_video(chat_id, file_path)
                 else:
-                    await client.send_document(chat_id, file_path, caption=message or None)
+                    if message:
+                        await client.send_document(chat_id, file_path, caption=message)
+                    else:
+                        await client.send_document(chat_id, file_path)
             else:
                 await client.send_message(chat_id, message)
             sent += 1
@@ -79,7 +84,6 @@ async def send_bulk(campaign_id, client, chat_ids, message, delay, file_path=Non
         "status": final_status,
         "completed_at": datetime.datetime.utcnow().isoformat()
     }).eq("id", campaign_id).execute()
-    
     campaign_controls.pop(campaign_id, None)
 
 @router.post("/send")
@@ -91,7 +95,7 @@ async def send_campaign(
     chat_ids: str = Form(...),
     delay_seconds: int = Form(3),
     sent_by: str = Form("admin"),
-    parse_mode: str = Form("md"),
+    parse_mode: str = Form("none"),
     file: Optional[UploadFile] = File(None)
 ):
     ids = [int(x) for x in chat_ids.split(",") if x.strip()]
@@ -108,10 +112,8 @@ async def send_campaign(
             file_type = "video"
         else:
             file_type = "document"
-        
         tmp = tempfile.NamedTemporaryFile(delete=False, suffix=f".{ext}")
-        content = await file.read()
-        tmp.write(content)
+        tmp.write(await file.read())
         tmp.close()
         file_path = tmp.name
 
@@ -126,10 +128,7 @@ async def send_campaign(
     
     campaign_id = campaign.data[0]["id"]
     client = await get_client(account_number)
-    background_tasks.add_task(
-        send_bulk, campaign_id, client, ids,
-        message, delay_seconds, file_path, file_type, parse_mode
-    )
+    background_tasks.add_task(send_bulk, campaign_id, client, ids, message, delay_seconds, file_path, file_type)
     
     return {"campaign_id": campaign_id, "status": "started", "total": len(ids)}
 
