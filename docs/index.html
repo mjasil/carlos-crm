@@ -312,12 +312,20 @@ async function connectAccount() {
   const btn = document.getElementById('connectBtn')
   btn.textContent = 'Connecting...'
   try {
-    const res = await api('post', `/api/accounts/connect/${state.account}`)
-    btn.textContent = `✅ ${res.name}`
-    btn.style.background = '#166534'
-    toast(`Connected: ${res.name}`)
-    loadDashboard()
-  } catch { btn.textContent = 'Connect Account'; toast('Connect failed - OTP needed on first run', 'error') }
+    const res = await api('get', `/test-connect/${state.account}`)
+    if (res.success) {
+      btn.textContent = `✅ ${res.name}`
+      btn.style.background = '#166534'
+      toast(`Connected: ${res.name}`)
+      loadDashboard()
+    } else {
+      btn.textContent = 'Connect Account'
+      toast('Connect failed: ' + res.error, 'error')
+    }
+  } catch(e) { 
+    btn.textContent = 'Connect Account'
+    toast('Connect failed - try again', 'error') 
+  }
 }
 
 async function loadDashboard() {
