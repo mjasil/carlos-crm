@@ -328,10 +328,14 @@ function showPage(name) {
 
 function setAccount(n) {
   state.account = n
+  state.folders = []
+  state.chats = []
+  state.selectedFolder = null
+  
   document.getElementById('acc1btn').style.cssText = 'flex:1;padding:8px;font-size:13px;border:none;cursor:pointer;border-radius:8px;' + (n===1?'background:#2563eb;color:white':'background:#334155;color:#f1f5f9')
   document.getElementById('acc2btn').style.cssText = 'flex:1;padding:8px;font-size:13px;border:none;cursor:pointer;border-radius:8px;' + (n===2?'background:#2563eb;color:white':'background:#334155;color:#f1f5f9')
   document.getElementById('dashAccountLabel').textContent = `Account ${n} active`
-  state.folders = []; state.chats = []
+
   // Restore connect button for this account
   const btn = document.getElementById('connectBtn')
   const savedName = state.accountNames[n]
@@ -342,6 +346,15 @@ function setAccount(n) {
     btn.textContent = `Connect Account ${n}`
     btn.style.background = '#2563eb'
   }
+
+  // Reset folder list and chat list
+  document.getElementById('folderList').innerHTML = '<p style="color:#94a3b8;font-size:13px">Click ↻ to load folders</p>'
+  document.getElementById('chatFilterCard').style.display = 'none'
+  document.getElementById('chatList').innerHTML = ''
+  document.getElementById('chatCount').textContent = '0'
+
+  // Auto load folders for this account
+  loadFolders()
 }
 
 async function connectAccount() {
