@@ -188,15 +188,22 @@
               <button onclick="insertFormat('||','||')" style="background:#334155;border:none;color:#94a3b8;padding:4px 10px;border-radius:6px;cursor:pointer;font-size:13px">Spoiler</button>
             </div>
             <textarea class="input" id="messageText" placeholder="Type your message...&#10;&#10;**bold** _italic_ \`code\`" style="min-height:120px;resize:none"></textarea>
-            <!-- File upload -->
+            <!-- Multiple File upload -->
             <div style="margin-top:12px">
-              <label style="color:#94a3b8;font-size:12px;display:block;margin-bottom:4px">Attach File (optional)</label>
-              <input type="file" id="fileInput" accept="image/*,audio/*,video/*,.pdf,.doc,.docx,.zip"
+              <label style="color:#94a3b8;font-size:12px;display:block;margin-bottom:4px">Attach Files (optional - multiple)</label>
+              <input type="file" id="fileInput" accept="image/*,audio/*,video/*,.pdf,.doc,.docx,.zip" multiple
                 style="background:#0f172a;border:1px solid #334155;border-radius:8px;padding:8px;color:#94a3b8;width:100%;font-size:12px;box-sizing:border-box">
-              <div style="display:flex;align-items:center;gap:8px;margin-top:4px">
-                <p id="fileInfo" style="color:#60a5fa;font-size:11px;flex:1"></p>
-                <button id="removeFileBtn" onclick="removeFile()" style="display:none;background:#ef4444;border:none;color:white;padding:2px 8px;border-radius:6px;cursor:pointer;font-size:11px">✕ Remove</button>
-              </div>
+              <div id="fileList" style="margin-top:6px;display:flex;flex-direction:column;gap:4px"></div>
+            </div>
+            <!-- Schedule -->
+            <div style="margin-top:12px">
+              <label style="color:#94a3b8;font-size:12px;display:block;margin-bottom:4px">📅 Schedule (optional)</label>
+              <input type="datetime-local" id="scheduleInput" class="input" style="font-size:13px">
+              <p style="color:#64748b;font-size:11px;margin-top:3px">Leave empty to send now</p>
+            </div>
+            <!-- Message Variables -->
+            <div style="margin-top:8px">
+              <p style="color:#94a3b8;font-size:11px">Variables: <span style="color:#60a5fa;cursor:pointer" onclick="insertVar('{name}')">+{name}</span></p>
             </div>
             <div style="margin-top:12px">
               <label style="color:#94a3b8;font-size:12px;display:block;margin-bottom:4px">Delay between messages (seconds)</label>
@@ -478,9 +485,10 @@ function renderChats() {
   const filtered = state.filter === 'all' ? state.chats : state.chats.filter(c => c.type === state.filter)
   document.getElementById('chatCount').textContent = filtered.length
   document.getElementById('chatList').innerHTML = filtered.map((c,i) => `
-    <div style="display:flex;align-items:center;gap:8px;font-size:12px;color:#cbd5e1;padding:4px 8px;background:#0f172a;border-radius:6px">
+    <div style="display:flex;align-items:center;gap:6px;font-size:12px;color:#cbd5e1;padding:4px 8px;background:#0f172a;border-radius:6px">
       <input type="checkbox" class="chat-chk" data-id="${c.chat_id}" data-idx="${i}" checked onchange="updateSelectedCount()" style="width:14px;height:14px;flex-shrink:0">
       <span style="flex:1">${c.name} <span style="color:#64748b">• ${c.type}</span></span>
+      <button onclick="blacklistChat(${c.chat_id}, ${i})" title="Blacklist" style="background:none;border:none;color:#f59e0b;cursor:pointer;font-size:12px;padding:0">🚫</button>
       <button onclick="removeChat(${i})" style="background:none;border:none;color:#f87171;cursor:pointer;font-size:14px;padding:0">✕</button>
     </div>`).join('')
   updateSelectedCount()
@@ -557,11 +565,19 @@ async function sendMessage() {
     formData.append('chat_ids', selectedIds.join(','))
     formData.append('delay_seconds', delay)
     formData.append('sent_by', user.name || 'admin')
-    formData.append('parse_mode', 'md')
     
+    // Multiple files
     const fileInput = document.getElementById('fileInput')
-    if (fileInput.files[0]) {
-      formData.append('file', fileInput.files[0])
+    if (fileInput.files.length > 0) {
+      for (let i = 0; i < fileInput.files.length; i++) {
+        formData.append('files', fileInput.files[i])
+      }
+    }
+    
+    // Schedule
+    const scheduleInput = document.getElementById('scheduleInput')
+    if (scheduleInput && scheduleInput.value) {
+      formData.append('scheduled_at', new Date(scheduleInput.value).toISOString())
     }
     
     const res = await axios.post(API + '/api/campaigns/send', formData, { timeout: 60000 })
@@ -748,6 +764,50 @@ function removeFile() {
   document.getElementById('fileInput').value = ''
   document.getElementById('fileInfo').textContent = ''
   document.getElementById('removeFileBtn').style.display = 'none'
+}
+
+// File list display
+document.addEventListener('DOMContentLoaded', () => {
+  const fi = document.getElementById('fileInput')
+  if (fi) fi.addEventListener('change', () => {
+    const list = document.getElementById('fileList')
+    list.innerHTML = ''
+    for (let i = 0; i < fi.files.length; i++) {
+      const f = fi.files[i]
+      const div = document.createElement('div')
+      div.style.cssText = 'display:flex;align-items:center;gap:6px;background:#0f172a;padding:4px 8px;border-radius:6px;font-size:12px;color:#94a3b8'
+      div.innerHTML = `📎 ${f.name} (${(f.size/1024).toFixed(1)}KB)`
+      list.appendChild(div)
+    }
+  })
+})
+
+function insertVar(v) {
+  const ta = document.getElementById('messageText')
+  const pos = ta.selectionStart
+  ta.value = ta.value.substring(0, pos) + v + ta.value.substring(pos)
+  ta.focus()
+}
+
+async function blacklistChat(chatId, idx) {
+  if (!confirm('Blacklist this contact? They will be skipped in future campaigns.')) return
+  try {
+    await api('post', `/api/contacts/blacklist/${chatId}`)
+    removeChat(idx)
+    toast('Contact blacklisted!')
+  } catch { toast('Failed to blacklist', 'error') }
+}
+
+async function resendFailed(campaignId) {
+  if (!confirm('Resend to all failed contacts?')) return
+  try {
+    const formData = new FormData()
+    formData.append('account_number', state.account)
+    formData.append('delay_seconds', 3)
+    const res = await axios.post(API + `/api/campaigns/${campaignId}/resend-failed`, formData, { timeout: 30000 })
+    toast(`Resending to failed contacts! Campaign: ${res.data.campaign_id.slice(0,8)}`)
+    loadCampaigns()
+  } catch { toast('Failed to resend', 'error') }
 }
 
 // Init - No login required
